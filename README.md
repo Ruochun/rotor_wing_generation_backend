@@ -108,6 +108,10 @@ The `generate_params.py` script translates abstract design requirements into det
 
 The `generate_wing.py` script uses **cubic spline interpolation** for smooth lofting between sections. The specified chord lengths and twist angles are treated as control points, and the actual wing surface is generated with smooth transitions using scipy's interpolation. This eliminates kinks and creates smooth leading and trailing edges.
 
+### Multi-Wing Alignment
+
+When generating multiple wings (n_wings > 1), the script automatically shifts each wing by 1/4 of the root chord length in the +X direction before rotation. This ensures that all wings align properly at their mid-chord (1/2 chord) position when rotated around the Y-axis, creating a symmetric multi-blade design.
+
 ## Requirements
 
 - Python 3.7+

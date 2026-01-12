@@ -462,6 +462,15 @@ class WingGenerator:
         # Generate the base wing
         base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points)
         
+        # Get the root chord length (first section)
+        root_chord = params['chord_0']
+        
+        # Shift the wing forward by 1/4 of the root chord length
+        # This aligns wings at their mid-chord (1/2 chord) for proper rotation alignment
+        shift_distance = root_chord * 0.25
+        shift_vector = np.array([shift_distance, 0, 0])
+        base_wing.vertices += shift_vector
+        
         # Get number of wings
         n_wings = params['n_wings']
         
