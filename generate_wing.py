@@ -27,6 +27,7 @@ class WingGenerator:
     """
     
     # Hub cylinder constants
+    # These are fixed dimensions as specified in the design requirements
     HUB_RADIUS = 0.003  # Hub cylinder radius in meters
     HUB_HEIGHT = 0.01   # Hub cylinder height in meters
     HOLE_DIAMETER = 0.00075  # Center hole diameter in meters
@@ -482,10 +483,11 @@ class WingGenerator:
             Trimesh object representing the hole cylinder
         """
         # Create cylinder along Z axis (default) with slightly larger height
-        # to ensure it fully penetrates the hub
+        # to ensure it fully penetrates the hub (1.5x height provides clearance)
+        HOLE_CLEARANCE_FACTOR = 1.5
         cylinder = trimesh.creation.cylinder(
             radius=self.HOLE_RADIUS,
-            height=self.HUB_HEIGHT * 1.5
+            height=self.HUB_HEIGHT * HOLE_CLEARANCE_FACTOR
         )
         
         # Rotate to align along Y axis (rotate 90 degrees around X axis)
@@ -553,6 +555,7 @@ class WingGenerator:
         # watertight, which can cause Boolean operations to fail. We try Boolean union
         # first (which creates a true merged solid), but fall back to concatenation
         # (which creates a single mesh file containing multiple solids) if it fails.
+        # Volume checking is disabled because wing meshes may not be perfect volumes.
         all_meshes = [hub_with_hole] + wing_meshes
         
         try:
@@ -565,7 +568,7 @@ class WingGenerator:
             else:
                 raise ValueError("Boolean union produced empty mesh")
                 
-        except Exception:
+        except (ValueError, Exception):
             # Fall back to concatenation (creates single mesh file with multiple solids)
             # This still produces "one mesh" as required, just not Boolean-merged
             combined_mesh = trimesh.util.concatenate(all_meshes)
