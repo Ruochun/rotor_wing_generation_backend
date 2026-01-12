@@ -18,6 +18,7 @@ import math
 import numpy as np
 import trimesh
 from typing import List, Tuple, Dict, Optional
+from scipy import interpolate
 
 
 class WingGenerator:
@@ -183,6 +184,29 @@ class WingGenerator:
         
         return m, p, t
     
+    def create_smooth_interpolator(self, control_values: List[float], control_positions: List[float], 
+                                   kind: str = 'cubic') -> interpolate.interp1d:
+        """
+        Create a smooth interpolator for parameters using spline interpolation.
+        
+        Args:
+            control_values: List of control point values (e.g., chord lengths)
+            control_positions: List of spanwise positions for control points
+            kind: Interpolation kind ('linear', 'quadratic', 'cubic')
+        
+        Returns:
+            Interpolation function that can be called with arbitrary positions
+        """
+        # Use cubic spline interpolation for smooth curves
+        # This treats control values as hints rather than strict requirements
+        return interpolate.interp1d(
+            control_positions, 
+            control_values, 
+            kind=kind,
+            fill_value='extrapolate',
+            assume_sorted=True
+        )
+    
     def create_lofted_surface(self, sections: List[np.ndarray]) -> trimesh.Trimesh:
         """
         Create a lofted surface from multiple airfoil sections.
@@ -320,36 +344,63 @@ class WingGenerator:
         # Generate section positions
         section_positions = np.linspace(0, overall_length, n_sections)
         
-        # Create all sections (defined + blended)
+        # Create smooth interpolators for chord and twist
+        # This treats the specified values as control points for smooth curves
+        chord_interpolator = self.create_smooth_interpolator(chord_lengths, section_positions, kind='cubic')
+        twist_interpolator = self.create_smooth_interpolator(twist_angles, section_positions, kind='cubic')
+        
+        # Create all sections (defined + blended) with smooth interpolation
         all_sections = []
+        all_positions = []
         
         for i in range(n_sections):
+            # Add the defined section
+            all_positions.append(section_positions[i])
+            
+            # Add blend section positions between this and next section
+            if i < n_sections - 1:
+                for k in range(1, n_blend_sections + 1):
+                    alpha = k / float(n_blend_sections + 1)
+                    z_pos = (1 - alpha) * section_positions[i] + alpha * section_positions[i + 1]
+                    all_positions.append(z_pos)
+        
+        # Generate all sections with smooth parameter interpolation
+        section_idx = 0
+        for i in range(n_sections):
             # Generate the defined section
+            z_pos = all_positions[section_idx]
             m, p, t = self.parse_naca4(naca_codes[i])
             profile = self.generate_naca4_profile(m, p, t, n_profile_points)
+            
+            # Use smoothly interpolated chord and twist
+            chord = float(chord_interpolator(z_pos))
+            twist = float(twist_interpolator(z_pos))
+            
             section = self.transform_profile_to_section(
-                profile, section_positions[i], chord_lengths[i], 
-                twist_angles[i], self.wing_start_location
+                profile, z_pos, chord, twist, self.wing_start_location
             )
             all_sections.append(section)
+            section_idx += 1
             
             # Add blend sections between this and next section
             if i < n_sections - 1:
                 for k in range(1, n_blend_sections + 1):
+                    z_pos = all_positions[section_idx]
                     alpha = k / float(n_blend_sections + 1)
                     
-                    # Blend position, NACA, twist, and chord
-                    z_pos = (1 - alpha) * section_positions[i] + alpha * section_positions[i + 1]
+                    # Blend NACA parameters
                     m, p, t = self.blend_naca_codes(naca_codes[i], naca_codes[i + 1], alpha)
-                    twist = (1 - alpha) * twist_angles[i] + alpha * twist_angles[i + 1]
-                    chord = (1 - alpha) * chord_lengths[i] + alpha * chord_lengths[i + 1]
-                    
-                    # Generate blended section
                     profile = self.generate_naca4_profile(m, p, t, n_profile_points)
+                    
+                    # Use smoothly interpolated chord and twist
+                    chord = float(chord_interpolator(z_pos))
+                    twist = float(twist_interpolator(z_pos))
+                    
                     section = self.transform_profile_to_section(
                         profile, z_pos, chord, twist, self.wing_start_location
                     )
                     all_sections.append(section)
+                    section_idx += 1
         
         # Create lofted surface
         wing_mesh = self.create_lofted_surface(all_sections)

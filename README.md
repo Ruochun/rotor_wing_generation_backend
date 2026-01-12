@@ -104,14 +104,19 @@ The `generate_params.py` script translates abstract design requirements into det
 | `max_twist_angle` | 6x `twist_X` angles | Linear interpolation from max to 0 |
 | `n_wings` | `n_wings` | Direct mapping |
 
+## Wing Generation
+
+The `generate_wing.py` script uses **cubic spline interpolation** for smooth lofting between sections. The specified chord lengths and twist angles are treated as control points, and the actual wing surface is generated with smooth transitions using scipy's interpolation. This eliminates kinks and creates smooth leading and trailing edges.
+
 ## Requirements
 
 - Python 3.7+
 - numpy
+- scipy
 - trimesh
 
 Install dependencies:
 
 ```bash
-pip install numpy trimesh
+pip install numpy scipy trimesh
 ```
