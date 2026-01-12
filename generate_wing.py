@@ -29,7 +29,7 @@ class WingGenerator:
     # Hub cylinder constants
     # These are fixed dimensions as specified in the design requirements
     HUB_RADIUS = 0.003  # Hub cylinder radius in meters
-    HUB_HEIGHT = 0.01   # Hub cylinder height in meters
+    HUB_HEIGHT = 0.008   # Hub cylinder height in meters
     HOLE_DIAMETER = 0.00075  # Center hole diameter in meters
     HOLE_RADIUS = HOLE_DIAMETER / 2  # Center hole radius in meters
     
