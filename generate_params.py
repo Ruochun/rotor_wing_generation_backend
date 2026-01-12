@@ -16,6 +16,9 @@ from typing import List
 DEFAULT_CAMBER_PERCENT = 6  # Default camber for wing designs
 MAX_POSITION_DIGIT = 9  # Maximum value for NACA position digit
 
+# Chord length constants
+ROOT_CHORD_LENGTH = 0.003  # Fixed chord length at root for rotor hub union
+
 
 def translate_to_naca_code(max_thickness: float, max_thickness_location: float) -> str:
     """
@@ -60,36 +63,45 @@ def generate_chord_lengths(average_chord: float, chord_variance: float, n_sectio
     Generate chord lengths for each section based on average and variance.
     
     Args:
-        average_chord: Average chord length across all sections
+        average_chord: Average chord length across all sections (excluding fixed root)
         chord_variance: Variance [0,1] indicating expansion/shrink pattern
                        0 = constant chord, 1 = maximum variation (expand then shrink)
     
     Returns:
-        List of chord lengths for each section
+        List of chord lengths for each section, with root always at ROOT_CHORD_LENGTH
     """
     if n_sections < 2:
-        return [average_chord] * n_sections
+        return [ROOT_CHORD_LENGTH]
     
-    # Create a pattern that expands from root, reaches maximum around middle, then shrinks to tip
-    # Pattern based on sample: starts smaller, expands to peak, then shrinks to very small at tip
     chord_lengths = []
     
-    # Define the shape: use a sin-based curve that peaks around 1/3 to 1/2 of span
-    for i in range(n_sections):
-        # Normalized position [0, 1]
+    # First section is always the fixed root chord
+    chord_lengths.append(ROOT_CHORD_LENGTH)
+    
+    # Generate smooth curve for remaining sections
+    # Use a combination of cosine functions for smooth transitions
+    for i in range(1, n_sections):
+        # Normalized position [0, 1] for sections after root
         t = i / (n_sections - 1)
         
-        # Create an asymmetric bell curve
-        # Peak around t=0.33-0.4, then decay more gradually, steep drop at the end
-        if t <= 0.4:
-            # Rising phase: quadratic growth
-            factor = 0.5 + 1.5 * (t / 0.4)  # From 0.5 to 2.0
-        elif t <= 0.8:
-            # Gradual decay
-            factor = 2.0 - 1.0 * ((t - 0.4) / 0.4)  # From 2.0 to 1.0
+        # Create a smooth asymmetric bell curve using cosine-based interpolation
+        # This creates a smooth curve that peaks around t=0.33, then gradually decays
+        
+        # Use a modified raised cosine for smooth transitions
+        # Peak around 30-40% of span, then gradual decay with steeper drop at the end
+        if t < 0.33:
+            # Rising phase: smooth acceleration from root to peak
+            # Use raised cosine for smooth S-curve
+            phase = t / 0.33
+            factor = 0.75 + 1.25 * (1.0 - math.cos(phase * math.pi)) / 2.0
+        elif t < 0.7:
+            # Gradual decay: smooth transition from peak to mid-span
+            phase = (t - 0.33) / 0.37
+            factor = 2.0 - 0.75 * (1.0 - math.cos(phase * math.pi)) / 2.0
         else:
-            # Steep drop at tip
-            factor = 1.0 - 0.75 * ((t - 0.8) / 0.2)  # From 1.0 to 0.25
+            # Steeper drop at tip: smooth but faster decay
+            phase = (t - 0.7) / 0.3
+            factor = 1.25 - 1.0 * (1.0 - math.cos(phase * math.pi)) / 2.0
         
         # Scale by variance: higher variance means more pronounced variation
         # At variance=0, factor should be 1.0 for all sections

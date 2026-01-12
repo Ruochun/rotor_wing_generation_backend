@@ -19,8 +19,8 @@ python generate_params.py output.csv [options]
 - `--overall-length`: Overall length of the wing in meters (default: 0.02)
 - `--chord-max-thickness`: Maximum chord thickness as percentage (default: 9.0)
 - `--chord-max-thickness-location`: Location of max thickness [0,1], where 0=leading edge (default: 0.4)
-- `--average-chord-length`: Average chord length in meters (default: 0.002)
-- `--chord-length-variance`: Chord length variance [0,1], 0=constant, 1=max variation (default: 0.5)
+- `--average-chord-length`: Average chord length in meters (default: 0.002). Note: Root section is always fixed at 0.003m for rotor hub union.
+- `--chord-length-variance`: Chord length variance [0,1], 0=constant, 1=max variation (default: 0.5). Uses smooth cosine-based transitions.
 - `--max-twist-angle`: Maximum twist angle at root in degrees (default: 40.0)
 - `--n-wings`: Number of wings (default: 3)
 - `--rpm`: Rotations per minute (default: 3000.0)
@@ -100,7 +100,7 @@ The `generate_params.py` script translates abstract design requirements into det
 |---------------------|---------------|-------------|
 | `overall_length` | `overall_length` | Direct mapping |
 | `chord_max_thickness` + `chord_max_thickness_location` | 6x `naca_X` codes | 4-digit NACA airfoil codes |
-| `average_chord_length` + `chord_length_variance` | 6x `chord_X` lengths | Chord distribution along span |
+| `average_chord_length` + `chord_length_variance` | 6x `chord_X` lengths | Smooth chord distribution along span. Root (chord_0) is always 0.003m. |
 | `max_twist_angle` | 6x `twist_X` angles | Linear interpolation from max to 0 |
 | `n_wings` | `n_wings` | Direct mapping |
 
