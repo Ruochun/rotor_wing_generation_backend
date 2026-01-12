@@ -118,9 +118,17 @@ When generating multiple wings (n_wings > 1), the script automatically shifts ea
 - numpy
 - scipy
 - trimesh
+- manifold3d (required for Boolean operations in hub generation)
+- networkx (optional, for mesh repair operations)
 
 Install dependencies:
 
 ```bash
-pip install numpy scipy trimesh
+pip install -r requirements.txt
+```
+
+Or install manually:
+
+```bash
+pip install numpy scipy trimesh manifold3d networkx
 ```
