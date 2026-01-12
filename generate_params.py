@@ -63,9 +63,11 @@ def generate_chord_lengths(average_chord: float, chord_variance: float, n_sectio
     Generate chord lengths for each section based on average and variance.
     
     Args:
-        average_chord: Average chord length across all sections (excluding fixed root)
+        average_chord: Target average chord length for non-root sections (meters).
+                      The root section is always ROOT_CHORD_LENGTH regardless of this value.
         chord_variance: Variance [0,1] indicating expansion/shrink pattern
-                       0 = constant chord, 1 = maximum variation (expand then shrink)
+                       0 = constant chord (all non-root sections equal average_chord)
+                       1 = maximum variation (expand then shrink with smooth transitions)
     
     Returns:
         List of chord lengths for each section, with root always at ROOT_CHORD_LENGTH
