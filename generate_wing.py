@@ -624,7 +624,7 @@ def main():
     parser = argparse.ArgumentParser(description='Generate wing geometry from CSV parameters')
     parser.add_argument('csv_file', help='Path to CSV file with wing parameters')
     parser.add_argument('--row', type=int, default=0, help='Row index to use (default: 0)')
-    parser.add_argument('--output', default='wing_output.obj', help='Output OBJ file path')
+    parser.add_argument('--output', default='wing_output.stl', help='Output STL file path')
     parser.add_argument('--blend-sections', type=int, default=6, 
                        help='Number of blend sections between defined stations (default: 6)')
     parser.add_argument('--profile-points', type=int, default=50,
@@ -652,7 +652,7 @@ def main():
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
     
-    # Export to OBJ
+    # Export to STL
     print(f"Exporting to {args.output}...")
     wing_mesh.export(args.output)
     
