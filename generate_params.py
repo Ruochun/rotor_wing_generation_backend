@@ -18,30 +18,34 @@ def translate_to_naca_code(max_thickness: float, max_thickness_location: float) 
     
     Args:
         max_thickness: Maximum thickness as a percentage (e.g., 9.0 for 9%)
-        max_thickness_location: Location of max thickness [0,1], where 0 is leading edge, 1 is trailing edge
-                              For NACA 4-digit: 0=leading edge, 0.4 is typical location
+        max_thickness_location: Location parameter [0,1] influencing airfoil shape
+                              0 = forward (leading edge bias)
+                              0.5 = balanced (typical)
+                              1.0 = aft (trailing edge bias)
     
     Returns:
         4-digit NACA code as string (e.g., "6409")
-    """
-    # NACA 4-digit format: MPTT
-    # M: Maximum camber in percentage of chord (first digit)
-    # P: Position of maximum camber in tenths of chord (second digit)
-    # TT: Maximum thickness in percentage of chord (last two digits)
     
-    # For simplicity, use moderate camber (6% = digit 6)
+    Note:
+        NACA 4-digit format is MPTT where:
+        - M: Maximum camber as percentage of chord (first digit)
+        - P: Position of maximum camber in tenths of chord (second digit)
+        - TT: Maximum thickness as percentage of chord (last two digits)
+        
+        The thickness distribution is determined by the NACA formula and has a
+        fixed shape, while P controls camber position which affects overall geometry.
+    """
+    # Use moderate camber (6% = digit 6) for wing designs
     m = 6
     
-    # Position: convert [0,1] to [0,9] for the second digit
-    # 0 means leading edge, but NACA P=0 is special (symmetric), so we map [0,1] to [1,9]
-    # However, location typically ranges around 0.3-0.5 for most airfoils
-    # Map [0,1] to [0,9], where 0->0, 0.5->4 (40% chord), 1->9
+    # Map location [0,1] to position digit [0,9]
+    # This controls the position of maximum camber along the chord
+    # Typical values: 3-5 (30%-50% chord)
     p = int(round(max_thickness_location * 9.0))
     
-    # Thickness: ensure it's in valid range and convert to two-digit format
-    # max_thickness is already a percentage (e.g., 9.0 for 9%)
+    # Thickness: convert to two-digit format and clamp to valid range
     tt = int(round(max_thickness))
-    tt = max(1, min(99, tt))  # Clamp to valid range
+    tt = max(1, min(99, tt))  # Ensure 01-99 range
     
     return f"{m}{p}{tt:02d}"
 
