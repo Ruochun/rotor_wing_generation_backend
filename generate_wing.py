@@ -132,8 +132,9 @@ class WingGenerator:
             Array of shape (N, 3) with 3D coordinates
         """
         # Scale and center the profile
-        # Center at half-chord (x = 0.5 becomes x = 0)
-        x = chord * (profile[:, 0] - 0.5)
+        # Leading edge (x=0) becomes x=0.5*chord (positive X)
+        # Trailing edge (x=1) becomes x=-0.5*chord (negative X)
+        x = chord * (0.5 - profile[:, 0])
         y = chord * profile[:, 1]
         z = np.full_like(x, z_pos)
         
