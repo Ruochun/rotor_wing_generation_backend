@@ -12,6 +12,11 @@ import math
 from typing import List
 
 
+# NACA airfoil constants
+DEFAULT_CAMBER_PERCENT = 6  # Default camber for wing designs
+MAX_POSITION_DIGIT = 9  # Maximum value for NACA position digit
+
+
 def translate_to_naca_code(max_thickness: float, max_thickness_location: float) -> str:
     """
     Translate chord max thickness and location to a NACA 4-digit code.
@@ -35,13 +40,13 @@ def translate_to_naca_code(max_thickness: float, max_thickness_location: float) 
         The thickness distribution is determined by the NACA formula and has a
         fixed shape, while P controls camber position which affects overall geometry.
     """
-    # Use moderate camber (6% = digit 6) for wing designs
-    m = 6
+    # Use moderate camber for wing designs
+    m = DEFAULT_CAMBER_PERCENT
     
     # Map location [0,1] to position digit [0,9]
     # This controls the position of maximum camber along the chord
     # Typical values: 3-5 (30%-50% chord)
-    p = int(round(max_thickness_location * 9.0))
+    p = int(round(max_thickness_location * MAX_POSITION_DIGIT))
     
     # Thickness: convert to two-digit format and clamp to valid range
     tt = int(round(max_thickness))
