@@ -208,3 +208,5 @@ __marimo__/
 
 # mesh files
 *.obj
+*.csv
+*.stl

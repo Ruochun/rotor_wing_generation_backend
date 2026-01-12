@@ -27,7 +27,7 @@ class WingGenerator:
     
     def __init__(self):
         """Initialize the wing generator."""
-        self.wing_start_location = np.array([0.0, 0.0, 0.001])
+        self.wing_start_location = np.array([0.0, 0.0, 0.0015])
         self.revolve_center = np.array([0.0, 0.0, 0.0])
         self.revolve_axis = np.array([0.0, 1.0, 0.0])
         
@@ -134,7 +134,7 @@ class WingGenerator:
         # Scale and center the profile
         # Leading edge (x=0) becomes x=0.25*chord (positive X)
         # Trailing edge (x=1) becomes x=-0.5*chord (negative X)
-        x = chord * (0.25 - profile[:, 0])
+        x = chord * (0.5 - profile[:, 0])
         y = chord * profile[:, 1]
         z = np.full_like(x, z_pos)
         
