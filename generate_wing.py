@@ -428,8 +428,6 @@ class WingGenerator:
         Returns:
             Rotated wing mesh
         """
-        if angle_deg == 0:
-            return wing_mesh
         
         # Create rotation matrix around Y axis
         angle_rad = math.radians(angle_deg)
@@ -449,6 +447,7 @@ class WingGenerator:
         
         # Create new mesh with rotated vertices
         rotated_mesh = trimesh.Trimesh(vertices=vertices, faces=wing_mesh.faces)
+        self.fix_normals_outward(rotated_mesh)
         
         return rotated_mesh
     
@@ -501,58 +500,8 @@ class WingGenerator:
         return cylinder
     
     def fix_normals_outward(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-        """
-        Ensure all mesh normals point outward using the right-hand rule.
-        
-        For watertight meshes, verifies normals point away from the centroid.
-        For non-watertight meshes, attempts to make normals consistent.
-        
-        Args:
-            mesh: The mesh to fix
-            
-        Returns:
-            Mesh with corrected normals (modifies in place and returns)
-        """
-        # First, try standard trimesh normal fixing
-        trimesh.repair.fix_normals(mesh)
-        
-        # For watertight volumes, verify normals point outward from centroid
-        if mesh.is_watertight and mesh.is_volume:
-            # Check if majority of normals point outward
-            # Sample some faces to determine orientation
-            sample_size = min(100, len(mesh.faces))
-            
-            # Use evenly distributed indices for sampling
-            step = max(1, len(mesh.faces) // sample_size)
-            sample_indices = np.arange(0, len(mesh.faces), step)[:sample_size]
-            
-            outward_count = 0
-            for face_idx in sample_indices:
-                face = mesh.faces[face_idx]
-                vertices = mesh.vertices[face]
-                face_center = vertices.mean(axis=0)
-                normal = mesh.face_normals[face_idx]
-                
-                # Vector from centroid to face center
-                outward_direction = face_center - mesh.centroid
-                
-                # Normalize to avoid magnitude issues
-                if np.linalg.norm(outward_direction) > 1e-10:
-                    outward_direction = outward_direction / np.linalg.norm(outward_direction)
-                    
-                    # Positive dot product means normal points outward
-                    if np.dot(normal, outward_direction) > 0:
-                        outward_count += 1
-            
-            # If majority of normals point inward, flip all faces
-            if outward_count < sample_size / 2:
-                mesh.faces = np.fliplr(mesh.faces)
-                mesh._cache.clear()  # Force recalculation of normals
-        else:
-            # For non-watertight meshes, use fix_inversion which attempts
-            # to make normals consistent based on connectivity
-            trimesh.repair.fix_inversion(mesh)
-        
+        trimesh.repair.fix_normals(mesh, True)
+        # trimesh.repair.fix_inversion(mesh, True)
         return mesh
     
     def generate_complete_design(self, params: Dict,
@@ -574,7 +523,7 @@ class WingGenerator:
         base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points)
         
         # Fix normals on base wing to ensure they point outward
-        self.fix_normals_outward(base_wing)
+        # self.fix_normals_outward(base_wing)
         
         # Get the root chord length (first section)
         root_chord = params['chord_0']
@@ -601,14 +550,8 @@ class WingGenerator:
         # Create hub cylinder
         hub = self.create_hub_cylinder()
         
-        # Fix normals on hub to ensure they point outward
-        self.fix_normals_outward(hub)
-        
         # Create hole cylinder
         hole = self.create_hole_cylinder()
-        
-        # Fix normals on hole to ensure they point outward
-        self.fix_normals_outward(hole)
         
         # Drill hole through hub (Boolean difference)
         # This works because both hub and hole are watertight solids
@@ -642,7 +585,7 @@ class WingGenerator:
             # This still produces "one mesh" as required, just not Boolean-merged
             combined_mesh = trimesh.util.concatenate(all_meshes)
             # Fix normals on the concatenated mesh
-            self.fix_normals_outward(combined_mesh)
+            # self.fix_normals_outward(combined_mesh)
             return combined_mesh
 
 
