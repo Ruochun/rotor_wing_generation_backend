@@ -46,23 +46,23 @@ python generate_params.py output.csv --average-chord-length 0.0025 --chord-lengt
 python generate_params.py output.csv --max-twist-angle 45
 
 # A full example
-python generate_params.py output.csv --overall-length 0.03 --n-wings 2 --average-chord-length 0.005 --chord-length-variance 0 --max-twist-angle 10 --chord-max-thickness 20
+python generate_params.py output.csv --overall-length 0.04 --n-wings 2 --average-chord-length 0.008 --chord-length-variance 0 --max-twist-angle 10 --chord-max-thickness 15
 ```
 
 ### `generate_wing.py`
 
-Generates 3D wing geometry from CSV parameters and exports as OBJ file.
+Generates 3D wing geometry from CSV parameters and exports as STL file.
 
 **Usage:**
 
 ```bash
-python generate_wing.py input.csv --output wing.obj [options]
+python generate_wing.py input.csv --output wing.stl [options]
 ```
 
 **Options:**
 
 - `--row`: Row index to use from CSV (default: 0)
-- `--output`: Output OBJ file path (default: wing_output.obj)
+- `--output`: Output STL file path (default: wing_output.stl)
 - `--blend-sections`: Number of blend sections between defined stations (default: 6)
 - `--profile-points`: Number of points per airfoil side (default: 50)
 
@@ -70,7 +70,7 @@ python generate_wing.py input.csv --output wing.obj [options]
 
 ```bash
 # Generate wing from parameters
-python generate_wing.py sample_params.csv --output wing.obj
+python generate_wing.py sample_params.csv --output wing.stl
 ```
 
 ## Complete Workflow
@@ -89,7 +89,7 @@ python generate_params.py custom_params.csv \
     --n-wings 4
 
 # Step 2: Generate 3D wing geometry
-python generate_wing.py custom_params.csv --output custom_wing.obj
+python generate_wing.py custom_params.csv --output custom_wing.stl
 ```
 
 ## Parameter Translation
@@ -118,9 +118,17 @@ When generating multiple wings (n_wings > 1), the script automatically shifts ea
 - numpy
 - scipy
 - trimesh
+- manifold3d (required for Boolean operations in hub generation)
+- networkx (optional, for mesh repair operations)
 
 Install dependencies:
 
 ```bash
-pip install numpy scipy trimesh
+pip install -r requirements.txt
+```
+
+Or install manually:
+
+```bash
+pip install numpy scipy trimesh manifold3d networkx
 ```

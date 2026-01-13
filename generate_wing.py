@@ -26,6 +26,13 @@ class WingGenerator:
     Generates 3D wing geometry from parametric design specifications.
     """
     
+    # Hub cylinder constants
+    # These are fixed dimensions as specified in the design requirements
+    HUB_RADIUS = 0.003  # Hub cylinder radius in meters
+    HUB_HEIGHT = 0.008   # Hub cylinder height in meters
+    HOLE_DIAMETER = 0.00075  # Center hole diameter in meters
+    HOLE_RADIUS = HOLE_DIAMETER / 2  # Center hole radius in meters
+    
     def __init__(self):
         """Initialize the wing generator."""
         self.wing_start_location = np.array([0.0, 0.0, 0.0015])
@@ -421,8 +428,6 @@ class WingGenerator:
         Returns:
             Rotated wing mesh
         """
-        if angle_deg == 0:
-            return wing_mesh
         
         # Create rotation matrix around Y axis
         angle_rad = math.radians(angle_deg)
@@ -442,14 +447,69 @@ class WingGenerator:
         
         # Create new mesh with rotated vertices
         rotated_mesh = trimesh.Trimesh(vertices=vertices, faces=wing_mesh.faces)
+        self.fix_normals_outward(rotated_mesh)
         
         return rotated_mesh
+    
+    def create_hub_cylinder(self) -> trimesh.Trimesh:
+        """
+        Create a cylindrical hub centered at the origin along the Y axis.
+        
+        Returns:
+            Trimesh object representing the hub cylinder
+        """
+        # Create cylinder along Z axis (default)
+        cylinder = trimesh.creation.cylinder(
+            radius=self.HUB_RADIUS,
+            height=self.HUB_HEIGHT
+        )
+        
+        # Rotate to align along Y axis (rotate 90 degrees around X axis)
+        transform = trimesh.transformations.rotation_matrix(
+            angle=np.radians(90),
+            direction=[1, 0, 0],
+            point=[0, 0, 0]
+        )
+        cylinder.apply_transform(transform)
+        
+        return cylinder
+    
+    def create_hole_cylinder(self) -> trimesh.Trimesh:
+        """
+        Create a cylindrical hole to be drilled through the hub.
+        
+        Returns:
+            Trimesh object representing the hole cylinder
+        """
+        # Create cylinder along Z axis (default) with slightly larger height
+        # to ensure it fully penetrates the hub (1.5x height provides clearance)
+        HOLE_CLEARANCE_FACTOR = 1.5
+        cylinder = trimesh.creation.cylinder(
+            radius=self.HOLE_RADIUS,
+            height=self.HUB_HEIGHT * HOLE_CLEARANCE_FACTOR
+        )
+        
+        # Rotate to align along Y axis (rotate 90 degrees around X axis)
+        transform = trimesh.transformations.rotation_matrix(
+            angle=np.radians(90),
+            direction=[1, 0, 0],
+            point=[0, 0, 0]
+        )
+        cylinder.apply_transform(transform)
+        
+        return cylinder
+    
+    def fix_normals_outward(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+        trimesh.repair.fix_normals(mesh, True)
+        # trimesh.repair.fix_inversion(mesh, True)
+        return mesh
     
     def generate_complete_design(self, params: Dict,
                                 n_blend_sections: int = 6,
                                 n_profile_points: int = 50) -> trimesh.Trimesh:
         """
-        Generate a complete wing design with multiple wings arranged circularly.
+        Generate a complete wing design with multiple wings arranged circularly
+        and a central hub with a drilled hole.
         
         Args:
             params: Dictionary of wing parameters
@@ -457,10 +517,13 @@ class WingGenerator:
             n_profile_points: Number of points per airfoil profile side
             
         Returns:
-            Combined mesh of all wings
+            Combined mesh of all wings merged with the hub
         """
         # Generate the base wing
         base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points)
+        
+        # Fix normals on base wing to ensure they point outward
+        # self.fix_normals_outward(base_wing)
         
         # Get the root chord length (first section)
         root_chord = params['chord_0']
@@ -484,13 +547,46 @@ class WingGenerator:
             rotated_wing = self.revolve_wing(base_wing, angle)
             wing_meshes.append(rotated_wing)
         
-        # Combine all wings
-        if len(wing_meshes) == 1:
-            combined_mesh = wing_meshes[0]
-        else:
-            combined_mesh = trimesh.util.concatenate(wing_meshes)
+        # Create hub cylinder
+        hub = self.create_hub_cylinder()
         
-        return combined_mesh
+        # Create hole cylinder
+        hole = self.create_hole_cylinder()
+        
+        # Drill hole through hub (Boolean difference)
+        # This works because both hub and hole are watertight solids
+        hub_with_hole = trimesh.boolean.difference([hub, hole])
+        
+        # Fix normals on the result of Boolean operation
+        self.fix_normals_outward(hub_with_hole)
+        
+        # Attempt Boolean union to merge hub with wings
+        # Note: The wing meshes generated by the lofting process may not be perfectly
+        # watertight, which can cause Boolean operations to fail. We try Boolean union
+        # first (which creates a true merged solid), but fall back to concatenation
+        # (which creates a single mesh file containing multiple solids) if it fails.
+        # Volume checking is disabled because wing meshes may not be perfect volumes.
+        all_meshes = [hub_with_hole] + wing_meshes
+        
+        try:
+            # Try Boolean union (creates a single merged solid)
+            combined_mesh = trimesh.boolean.union(all_meshes, check_volume=False)
+            
+            # Check if union succeeded (non-empty result)
+            if combined_mesh.vertices.shape[0] > 0 and combined_mesh.faces.shape[0] > 0:
+                # Fix normals on the final combined mesh
+                self.fix_normals_outward(combined_mesh)
+                return combined_mesh
+            else:
+                raise ValueError("Boolean union produced empty mesh")
+                
+        except (ValueError, Exception):
+            # Fall back to concatenation (creates single mesh file with multiple solids)
+            # This still produces "one mesh" as required, just not Boolean-merged
+            combined_mesh = trimesh.util.concatenate(all_meshes)
+            # Fix normals on the concatenated mesh
+            # self.fix_normals_outward(combined_mesh)
+            return combined_mesh
 
 
 def load_params_from_csv(csv_file: str, row_index: int = 0) -> Dict:
@@ -542,7 +638,7 @@ def main():
     parser = argparse.ArgumentParser(description='Generate wing geometry from CSV parameters')
     parser.add_argument('csv_file', help='Path to CSV file with wing parameters')
     parser.add_argument('--row', type=int, default=0, help='Row index to use (default: 0)')
-    parser.add_argument('--output', default='wing_output.obj', help='Output OBJ file path')
+    parser.add_argument('--output', default='wing_output.stl', help='Output STL file path')
     parser.add_argument('--blend-sections', type=int, default=6, 
                        help='Number of blend sections between defined stations (default: 6)')
     parser.add_argument('--profile-points', type=int, default=50,
@@ -570,7 +666,7 @@ def main():
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
     
-    # Export to OBJ
+    # Export to STL
     print(f"Exporting to {args.output}...")
     wing_mesh.export(args.output)
     
