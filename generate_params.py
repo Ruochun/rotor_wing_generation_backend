@@ -13,23 +13,23 @@ from typing import List
 
 
 # NACA airfoil constants
-DEFAULT_CAMBER_PERCENT = 6  # Default camber for wing designs
 MAX_POSITION_DIGIT = 9  # Maximum value for NACA position digit
 
 # Chord length constants
 ROOT_CHORD_LENGTH = 0.003  # Fixed chord length at root for rotor hub union
 
 
-def translate_to_naca_code(max_thickness: float, max_thickness_location: float) -> str:
+def translate_to_naca_code(max_thickness: float, max_camber: float, max_camber_location: float) -> str:
     """
-    Translate chord max thickness and location to a NACA 4-digit code.
+    Translate chord max thickness, camber, and location to a NACA 4-digit code.
     
     Args:
         max_thickness: Maximum thickness as a percentage (e.g., 9.0 for 9%)
-        max_thickness_location: Location parameter [0,1] influencing airfoil shape
-                              0 = forward (leading edge bias)
-                              0.5 = balanced (typical)
-                              1.0 = aft (trailing edge bias)
+        max_camber: Maximum camber as a percentage (e.g., 6.0 for 6%)
+        max_camber_location: Location parameter [0,1] for position of maximum camber
+                           0 = forward (leading edge bias)
+                           0.5 = balanced (typical)
+                           1.0 = aft (trailing edge bias)
     
     Returns:
         4-digit NACA code as string (e.g., "6409")
@@ -43,13 +43,13 @@ def translate_to_naca_code(max_thickness: float, max_thickness_location: float) 
         The thickness distribution is determined by the NACA formula and has a
         fixed shape, while P controls camber position which affects overall geometry.
     """
-    # Use moderate camber for wing designs
-    m = DEFAULT_CAMBER_PERCENT
+    # Maximum camber for wing designs
+    m = int(round(max_camber))
     
     # Map location [0,1] to position digit [0,9]
     # This controls the position of maximum camber along the chord
     # Typical values: 3-5 (30%-50% chord)
-    p = int(round(max_thickness_location * MAX_POSITION_DIGIT))
+    p = int(round(max_camber_location * MAX_POSITION_DIGIT))
     
     # Thickness: convert to two-digit format and clamp to valid range
     tt = int(round(max_thickness))
@@ -148,7 +148,8 @@ def generate_params_csv(
     output_file: str,
     overall_length: float = 0.02,
     chord_max_thickness: float = 9.0,
-    chord_max_thickness_location: float = 0.4,
+    max_camber: float = 6.0,
+    max_camber_location: float = 0.4,
     average_chord_length: float = 0.002,
     chord_length_variance: float = 0.5,
     max_twist_angle: float = 40.0,
@@ -165,7 +166,8 @@ def generate_params_csv(
         output_file: Path to the output CSV file
         overall_length: Overall length of the wing (m)
         chord_max_thickness: Maximum thickness as percentage (e.g., 9.0 for 9%)
-        chord_max_thickness_location: Location of max thickness [0,1]
+        max_camber: Maximum camber as percentage (e.g., 6.0 for 6%)
+        max_camber_location: Location of max camber [0,1]
         average_chord_length: Average chord length (m)
         chord_length_variance: Variance in chord length [0,1]
         max_twist_angle: Maximum twist angle at root (degrees)
@@ -176,7 +178,7 @@ def generate_params_csv(
         case_index: Case index for tracking
     """
     # Translate abstract requirements to concrete parameters
-    naca_code = translate_to_naca_code(chord_max_thickness, chord_max_thickness_location)
+    naca_code = translate_to_naca_code(chord_max_thickness, max_camber, max_camber_location)
     chord_lengths = generate_chord_lengths(average_chord_length, chord_length_variance, n_sections)
     twist_angles = generate_twist_angles(max_twist_angle, n_sections)
     
@@ -215,7 +217,7 @@ def generate_params_csv(
     print(f"Generated parameter file: {output_file}")
     print(f"  Overall length: {overall_length}")
     print(f"  Number of wings: {n_wings}")
-    print(f"  NACA code: {naca_code} (thickness={chord_max_thickness}%, location={chord_max_thickness_location})")
+    print(f"  NACA code: {naca_code} (camber={max_camber}%, camber_location={max_camber_location}, thickness={chord_max_thickness}%)")
     print(f"  Chord lengths: {[f'{c:.6f}' for c in chord_lengths]}")
     print(f"  Twist angles: {[f'{t:.1f}' for t in twist_angles]}")
     print(f"  RPM: {rpm}, Density: {rho} kg/m³")
@@ -234,8 +236,8 @@ Examples:
   # Custom overall length and number of wings
   python generate_params.py output.csv --overall-length 0.03 --n-wings 4
   
-  # Custom chord thickness and location
-  python generate_params.py output.csv --chord-max-thickness 12 --chord-max-thickness-location 0.3
+  # Custom chord thickness, camber, and camber location
+  python generate_params.py output.csv --chord-max-thickness 12 --max-camber 5 --max-camber-location 0.3
   
   # Custom chord distribution
   python generate_params.py output.csv --average-chord-length 0.0025 --chord-length-variance 0.8
@@ -250,8 +252,10 @@ Examples:
                        help='Overall length of the wing in meters (default: 0.02)')
     parser.add_argument('--chord-max-thickness', type=float, default=9.0,
                        help='Maximum chord thickness as percentage (default: 9.0)')
-    parser.add_argument('--chord-max-thickness-location', type=float, default=0.4,
-                       help='Location of max thickness [0,1], 0=leading edge (default: 0.4)')
+    parser.add_argument('--max-camber', type=float, default=6.0,
+                       help='Maximum camber as percentage (default: 6.0)')
+    parser.add_argument('--max-camber-location', type=float, default=0.4,
+                       help='Location of max camber [0,1], 0=leading edge (default: 0.4)')
     parser.add_argument('--average-chord-length', type=float, default=0.002,
                        help='Average chord length in meters (default: 0.002)')
     parser.add_argument('--chord-length-variance', type=float, default=0.5,
@@ -272,8 +276,8 @@ Examples:
     args = parser.parse_args()
     
     # Validate inputs
-    if args.chord_max_thickness_location < 0 or args.chord_max_thickness_location > 1:
-        parser.error("chord-max-thickness-location must be between 0 and 1")
+    if args.max_camber_location < 0 or args.max_camber_location > 1:
+        parser.error("max-camber-location must be between 0 and 1")
     if args.chord_length_variance < 0 or args.chord_length_variance > 1:
         parser.error("chord-length-variance must be between 0 and 1")
     if args.n_sections < 2:
@@ -284,7 +288,8 @@ Examples:
         output_file=args.output,
         overall_length=args.overall_length,
         chord_max_thickness=args.chord_max_thickness,
-        chord_max_thickness_location=args.chord_max_thickness_location,
+        max_camber=args.max_camber,
+        max_camber_location=args.max_camber_location,
         average_chord_length=args.average_chord_length,
         chord_length_variance=args.chord_length_variance,
         max_twist_angle=args.max_twist_angle,
