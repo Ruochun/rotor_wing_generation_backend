@@ -43,13 +43,15 @@ def translate_to_naca_code(max_thickness: float, max_camber: float, max_camber_l
         The thickness distribution is determined by the NACA formula and has a
         fixed shape, while P controls camber position which affects overall geometry.
     """
-    # Maximum camber for wing designs
+    # Maximum camber for wing designs - clamp to valid single digit range
     m = int(round(max_camber))
+    m = max(0, min(9, m))  # Ensure 0-9 range for valid NACA codes
     
     # Map location [0,1] to position digit [0,9]
     # This controls the position of maximum camber along the chord
     # Typical values: 3-5 (30%-50% chord)
     p = int(round(max_camber_location * MAX_POSITION_DIGIT))
+    p = max(0, min(9, p))  # Ensure 0-9 range
     
     # Thickness: convert to two-digit format and clamp to valid range
     tt = int(round(max_thickness))
