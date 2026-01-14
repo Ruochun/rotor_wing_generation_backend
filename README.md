@@ -18,7 +18,8 @@ python generate_params.py output.csv [options]
 
 - `--overall-length`: Overall length of the wing in meters (default: 0.02)
 - `--chord-max-thickness`: Maximum chord thickness as percentage (default: 9.0)
-- `--chord-max-thickness-location`: Location of max thickness [0,1], where 0=leading edge (default: 0.4)
+- `--max-camber`: Maximum camber as percentage (default: 6.0)
+- `--max-camber-location`: Location of max camber [0,1], where 0=leading edge (default: 0.4)
 - `--average-chord-length`: Average chord length in meters (default: 0.002). Note: Root section is always fixed at 0.003m for rotor hub union.
 - `--chord-length-variance`: Chord length variance [0,1], 0=constant, 1=max variation (default: 0.5). Uses smooth cosine-based transitions.
 - `--max-twist-angle`: Maximum twist angle at root in degrees (default: 40.0)
@@ -36,8 +37,8 @@ python generate_params.py output.csv
 # Custom overall length and number of wings
 python generate_params.py output.csv --overall-length 0.03 --n-wings 4
 
-# Custom chord thickness and location
-python generate_params.py output.csv --chord-max-thickness 12 --chord-max-thickness-location 0.3
+# Custom chord thickness, camber, and camber location
+python generate_params.py output.csv --chord-max-thickness 12 --max-camber 5 --max-camber-location 0.3
 
 # Custom chord distribution with high variance
 python generate_params.py output.csv --average-chord-length 0.0025 --chord-length-variance 0.8
@@ -46,7 +47,7 @@ python generate_params.py output.csv --average-chord-length 0.0025 --chord-lengt
 python generate_params.py output.csv --max-twist-angle 45
 
 # A full example
-python generate_params.py output.csv --overall-length 0.04 --n-wings 2 --average-chord-length 0.008 --chord-length-variance 0 --max-twist-angle 10 --chord-max-thickness 15
+python generate_params.py output.csv --overall-length 0.04 --n-wings 2 --average-chord-length 0.008 --chord-length-variance 0 --max-twist-angle 10 --chord-max-thickness 15 --max-camber-location 0.4 --max-camber 6
 ```
 
 ### `generate_wing.py`
@@ -130,7 +131,8 @@ Generate a custom wing design from abstract requirements and analyze its perform
 python generate_params.py custom_params.csv \
     --overall-length 0.025 \
     --chord-max-thickness 12 \
-    --chord-max-thickness-location 0.3 \
+    --max-camber 5 \
+    --max-camber-location 0.3 \
     --average-chord-length 0.0022 \
     --chord-length-variance 0.7 \
     --max-twist-angle 45 \
@@ -150,7 +152,7 @@ The `generate_params.py` script translates abstract design requirements into det
 | Abstract Requirement | Translates To | Description |
 |---------------------|---------------|-------------|
 | `overall_length` | `overall_length` | Direct mapping |
-| `chord_max_thickness` + `chord_max_thickness_location` | 6x `naca_X` codes | 4-digit NACA airfoil codes |
+| `chord_max_thickness` + `max_camber` + `max_camber_location` | 6x `naca_X` codes | 4-digit NACA airfoil codes |
 | `average_chord_length` + `chord_length_variance` | 6x `chord_X` lengths | Smooth chord distribution along span. Root (chord_0) is always 0.003m. |
 | `max_twist_angle` | 6x `twist_X` angles | Linear interpolation from max to 0 |
 | `n_wings` | `n_wings` | Direct mapping |
