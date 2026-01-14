@@ -276,6 +276,8 @@ Examples:
     args = parser.parse_args()
     
     # Validate inputs
+    if args.max_camber < 0 or args.max_camber > 9:
+        parser.error("max-camber must be between 0 and 9 for valid NACA codes")
     if args.max_camber_location < 0 or args.max_camber_location > 1:
         parser.error("max-camber-location must be between 0 and 1")
     if args.chord_length_variance < 0 or args.chord_length_variance > 1:
