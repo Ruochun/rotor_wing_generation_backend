@@ -47,7 +47,7 @@ python generate_params.py output.csv --average-chord-length 0.0025 --chord-lengt
 python generate_params.py output.csv --max-twist-angle 45
 
 # A full example
-python generate_params.py output.csv --overall-length 0.04 --n-wings 2 --average-chord-length 0.008 --chord-length-variance 0 --max-twist-angle 10 --chord-max-thickness 15
+python generate_params.py output.csv --overall-length 0.04 --n-wings 2 --average-chord-length 0.008 --chord-length-variance 0 --max-twist-angle 10 --chord-max-thickness 15 --max-camber-location 0.4 --max-camber 6
 ```
 
 ### `generate_wing.py`
