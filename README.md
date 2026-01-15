@@ -185,3 +185,53 @@ Or install manually:
 ```bash
 pip install numpy scipy trimesh manifold3d networkx
 ```
+
+## Distribution as Executables
+
+For users who don't want to install Python or dependencies, this project can be packaged into standalone executables for Windows and Linux.
+
+### Using Pre-built Executables
+
+If you received pre-built executables, you can use them directly without installing Python:
+
+**Windows:**
+```cmd
+generate_params.exe output.csv --overall-length 0.03
+generate_wing.exe input.csv --output wing.stl
+analysis.exe input.csv results.csv --rpm 4000
+```
+
+**Linux:**
+```bash
+./generate_params output.csv --overall-length 0.03
+./generate_wing input.csv --output wing.stl
+./analysis input.csv results.csv --rpm 4000
+```
+
+### Building Executables
+
+To build executables yourself, see the [packaging/README.md](packaging/README.md) for detailed instructions.
+
+Quick start:
+
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
+   ```
+
+2. Build executables:
+   
+   **Windows:**
+   ```cmd
+   cd packaging
+   build_windows.bat
+   ```
+   
+   **Linux/macOS:**
+   ```bash
+   cd packaging
+   ./build_linux.sh
+   ```
+
+3. Find executables in `packaging/dist/`
