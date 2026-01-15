@@ -13,7 +13,10 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=[
+        'csv',
+        'math',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
