@@ -12,7 +12,7 @@ echo ""
 # Check if pyinstaller is installed
 if ! python3 -c "import PyInstaller" &> /dev/null; then
     echo "ERROR: PyInstaller is not installed!"
-    echo "Please run: pip install -r requirements-dev.txt"
+    echo "Please run: pip install pyinstaller"
     exit 1
 fi
 

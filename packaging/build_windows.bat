@@ -11,7 +11,7 @@ REM Check if pyinstaller is installed
 python -c "import PyInstaller" >nul 2>&1
 if errorlevel 1 (
     echo ERROR: PyInstaller is not installed!
-    echo Please run: pip install -r requirements-dev.txt
+    echo Please run: pip install pyinstaller
     exit /b 1
 )
 
