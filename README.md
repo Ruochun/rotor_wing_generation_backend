@@ -76,10 +76,14 @@ python generate_wing.py input.csv --output wing.stl [options]
 **3D Printing Enhancement:**
 
 The `--envelope-offset` parameter adds a thin envelope around all airfoil sections, which:
-- Removes sharp trailing edges that are difficult to print
+- Removes sharp trailing edges that are difficult to print with **smooth circular rounding**
+- Creates a rounded cap at the trailing edge by interpolating multiple offset directions
 - Rounds the wing tip for better printability
 - Eliminates thin features that might break during printing
 - Default value of 0.02 (2% of chord) provides a good balance
+
+The trailing edge rounding uses angular interpolation to create a smooth transition between 
+upper and lower surface offsets, eliminating the sharp corners that would otherwise occur.
 
 To disable the envelope (not recommended for 3D printing), set `--envelope-offset 0.0`.
 

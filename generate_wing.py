@@ -64,26 +64,33 @@ class WingGenerator:
         
         return m, p, t
     
-    def offset_profile(self, profile: np.ndarray, offset_distance: float) -> np.ndarray:
+    def offset_profile(self, profile: np.ndarray, offset_distance: float, 
+                      n_te_points: int = 8) -> np.ndarray:
         """
         Apply an outward normal offset to a closed 2D profile curve.
         This creates an envelope around the profile, removing sharp edges.
+        At the trailing edge, creates a smooth rounded cap by interpolating
+        multiple offset directions.
         
         Args:
             profile: Array of shape (N, 2) with (x, y) coordinates forming a closed loop
             offset_distance: Distance to offset in the outward normal direction (in profile units)
+            n_te_points: Number of intermediate points to add at the trailing edge for rounding
             
         Returns:
-            Array of shape (N, 2) with offset (x, y) coordinates
+            Array of shape (N+n_te_points, 2) with offset (x, y) coordinates
         """
         if offset_distance <= 0:
             return profile
         
         n_points = len(profile)
-        offset_profile = np.zeros_like(profile)
         
         # Calculate centroid once for all points
         centroid = profile.mean(axis=0)
+        
+        # First pass: calculate offset for all original points
+        offset_points = []
+        offset_normals = []
         
         for i in range(n_points):
             # Get neighboring points (with wrapping for closed curve)
@@ -131,10 +138,55 @@ class WingGenerator:
             if np.dot(normal, to_centroid) > 0:
                 normal = -normal
             
-            # Apply offset
-            offset_profile[i] = curr_point + normal * offset_distance
+            # Store offset point and normal
+            offset_points.append(curr_point + normal * offset_distance)
+            offset_normals.append(normal)
         
-        return offset_profile
+        # Detect trailing edge: for NACA profiles, it's typically the first point (x ≈ 1.0)
+        # Find the point with maximum x coordinate
+        x_coords = profile[:, 0]
+        te_idx = np.argmax(x_coords)
+        te_point = profile[te_idx]
+        
+        # Get the normals of points adjacent to the trailing edge
+        # These define the angular range to interpolate
+        prev_te_idx = (te_idx - 1) % n_points
+        next_te_idx = (te_idx + 1) % n_points
+        
+        normal_before = offset_normals[prev_te_idx]
+        normal_after = offset_normals[next_te_idx]
+        
+        # Calculate angles of the normals
+        angle_before = np.arctan2(normal_before[1], normal_before[0])
+        angle_after = np.arctan2(normal_after[1], normal_after[0])
+        
+        # Ensure we interpolate the shorter arc
+        # If the angular difference is greater than π, adjust
+        angle_diff = angle_after - angle_before
+        if angle_diff > np.pi:
+            angle_after -= 2 * np.pi
+        elif angle_diff < -np.pi:
+            angle_after += 2 * np.pi
+        
+        # Create the final offset profile with rounded trailing edge
+        result = []
+        
+        for i in range(n_points):
+            if i == te_idx and n_te_points > 0:
+                # At trailing edge, insert interpolated points for rounding
+                for j in range(n_te_points + 1):
+                    alpha = j / float(n_te_points)
+                    # Interpolate angle
+                    interp_angle = (1 - alpha) * angle_before + alpha * angle_after
+                    # Create normal at this angle
+                    interp_normal = np.array([np.cos(interp_angle), np.sin(interp_angle)])
+                    # Add offset point
+                    result.append(te_point + interp_normal * offset_distance)
+            else:
+                # Regular offset point
+                result.append(offset_points[i])
+        
+        return np.array(result)
     
     def generate_naca4_profile(self, m: float, p: float, t: float, 
                                n_points: int = 100, 
