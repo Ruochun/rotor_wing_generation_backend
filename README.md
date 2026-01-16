@@ -68,6 +68,17 @@ python generate_wing.py input.csv --output wing.stl [options]
 - `--output`: Output STL file path (default: wing_output.stl)
 - `--blend-sections`: Number of blend sections between defined stations (default: 6)
 - `--profile-points`: Number of points per airfoil side (default: 50)
+- `--envelope-offset`: Envelope offset as fraction of chord (default: 0.02). Adds a small, thin envelope around all NACA sections by offsetting in the outward normal direction. This removes sharp edges (especially at the trailing edge and wing tip), making the wing more 3D printing friendly.
+
+**3D Printing Enhancement:**
+
+The `--envelope-offset` parameter adds a thin envelope around all airfoil sections, which:
+- Removes sharp trailing edges that are difficult to print
+- Rounds the wing tip for better printability
+- Eliminates thin features that might break during printing
+- Default value of 0.02 (2% of chord) provides a good balance
+
+To disable the envelope (not recommended for 3D printing), set `--envelope-offset 0.0`.
 
 **Output:**
 
@@ -77,12 +88,18 @@ The script generates **two STL files**:
 
 Both files maintain proper outward-pointing normals for correct 3D printing and visualization.
 
-**Example:**
+**Examples:**
 
 ```bash
-# Generate wing from parameters
+# Generate wing from parameters with default envelope offset (0.02)
 # This creates two files: wing.stl (CCW) and wing_cw.stl (CW)
 python generate_wing.py sample_params.csv --output wing.stl
+
+# Generate wing with larger envelope for more robust 3D printing
+python generate_wing.py sample_params.csv --output wing.stl --envelope-offset 0.03
+
+# Generate wing without envelope (sharp edges, not recommended for 3D printing)
+python generate_wing.py sample_params.csv --output wing.stl --envelope-offset 0.0
 ```
 
 ### `analysis.py`
