@@ -504,6 +504,34 @@ class WingGenerator:
         # trimesh.repair.fix_inversion(mesh, True)
         return mesh
     
+    def create_clockwise_version(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+        """
+        Create a clockwise version of the wing by mirroring across the XY plane.
+        
+        The original design is for counterclockwise rotation (when viewed from above,
+        looking down the Y axis). To create a clockwise version, we mirror the mesh
+        across the XY plane (negate Z coordinates) and flip the face winding order
+        to maintain outward-pointing normals.
+        
+        Args:
+            mesh: The counterclockwise wing mesh
+            
+        Returns:
+            Mirrored mesh suitable for clockwise rotation with correct outward normals
+        """
+        # Create a copy of the mesh
+        mirrored_mesh = mesh.copy()
+        
+        # Mirror across XY plane by negating Z coordinates
+        mirrored_mesh.vertices[:, 2] *= -1
+        
+        # Flip face winding order to maintain outward normals
+        # When we mirror geometry, the normal direction inverts, so we need to
+        # reverse the vertex order in each face to flip the normals back
+        mirrored_mesh.faces = np.fliplr(mirrored_mesh.faces)
+        
+        return mirrored_mesh
+    
     def generate_complete_design(self, params: Dict,
                                 n_blend_sections: int = 6,
                                 n_profile_points: int = 50) -> trimesh.Trimesh:
@@ -666,9 +694,22 @@ def main():
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
     
-    # Export to STL
-    print(f"Exporting to {args.output}...")
+    # Export counterclockwise version to STL
+    print(f"Exporting counterclockwise version to {args.output}...")
     wing_mesh.export(args.output)
+    
+    # Generate clockwise version
+    print("Generating clockwise version...")
+    cw_mesh = generator.create_clockwise_version(wing_mesh)
+    
+    # Determine output filename for clockwise version
+    # Split the filename to insert "_cw" before the extension
+    import os
+    base_name, ext = os.path.splitext(args.output)
+    cw_output = f"{base_name}_cw{ext}"
+    
+    print(f"Exporting clockwise version to {cw_output}...")
+    cw_mesh.export(cw_output)
     
     print("Done!")
 
