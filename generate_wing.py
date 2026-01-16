@@ -113,8 +113,13 @@ class WingGenerator:
             if avg_tangent_norm > 1e-10:
                 avg_tangent = avg_tangent / avg_tangent_norm
             else:
-                # Fallback: use perpendicular to one tangent when they oppose
-                avg_tangent = np.array([-tangent1[1], tangent1[0]])
+                # Fallback: use perpendicular to tangent1 when they oppose
+                # tangent1 is already normalized at this point
+                if tangent1_norm > 1e-10:
+                    avg_tangent = np.array([-tangent1[1], tangent1[0]])
+                else:
+                    # Both tangents are degenerate, use perpendicular to tangent2
+                    avg_tangent = np.array([-tangent2[1], tangent2[0]])
             
             # Normal is perpendicular to tangent (rotated 90 degrees)
             normal = np.array([-avg_tangent[1], avg_tangent[0]])
