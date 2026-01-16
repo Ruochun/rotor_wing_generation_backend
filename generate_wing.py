@@ -82,6 +82,9 @@ class WingGenerator:
         n_points = len(profile)
         offset_profile = np.zeros_like(profile)
         
+        # Calculate centroid once for all points
+        centroid = profile.mean(axis=0)
+        
         for i in range(n_points):
             # Get neighboring points (with wrapping for closed curve)
             prev_idx = (i - 1) % n_points
@@ -110,16 +113,13 @@ class WingGenerator:
             if avg_tangent_norm > 1e-10:
                 avg_tangent = avg_tangent / avg_tangent_norm
             else:
-                # Fallback to perpendicular of one tangent
-                avg_tangent = tangent1
+                # Fallback: use perpendicular to one tangent when they oppose
+                avg_tangent = np.array([-tangent1[1], tangent1[0]])
             
-            # Outward normal is perpendicular to tangent (rotated 90 degrees CCW)
-            # For a closed curve traversed counter-clockwise, rotating tangent 90° CCW gives outward normal
+            # Normal is perpendicular to tangent (rotated 90 degrees)
             normal = np.array([-avg_tangent[1], avg_tangent[0]])
             
-            # To ensure outward direction, check if normal points away from curve center
-            # Use a simple heuristic: the centroid of the profile
-            centroid = profile.mean(axis=0)
+            # Ensure outward direction by checking distance from centroid
             to_centroid = centroid - curr_point
             
             # If normal points toward centroid, flip it
@@ -452,9 +452,8 @@ class WingGenerator:
             m, p, t = self.parse_naca4(naca_codes[i])
             profile = self.generate_naca4_profile(m, p, t, n_profile_points)
             
-            # Apply envelope offset if specified
-            if envelope_offset > 0:
-                profile = self.offset_profile(profile, envelope_offset)
+            # Apply envelope offset (offset_profile handles offset <= 0 case)
+            profile = self.offset_profile(profile, envelope_offset)
             
             # Use smoothly interpolated chord and twist
             chord = float(chord_interpolator(z_pos))
@@ -476,9 +475,8 @@ class WingGenerator:
                     m, p, t = self.blend_naca_codes(naca_codes[i], naca_codes[i + 1], alpha)
                     profile = self.generate_naca4_profile(m, p, t, n_profile_points)
                     
-                    # Apply envelope offset if specified
-                    if envelope_offset > 0:
-                        profile = self.offset_profile(profile, envelope_offset)
+                    # Apply envelope offset (offset_profile handles offset <= 0 case)
+                    profile = self.offset_profile(profile, envelope_offset)
                     
                     # Use smoothly interpolated chord and twist
                     chord = float(chord_interpolator(z_pos))

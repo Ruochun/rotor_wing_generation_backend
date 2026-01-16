@@ -68,7 +68,10 @@ python generate_wing.py input.csv --output wing.stl [options]
 - `--output`: Output STL file path (default: wing_output.stl)
 - `--blend-sections`: Number of blend sections between defined stations (default: 6)
 - `--profile-points`: Number of points per airfoil side (default: 50)
-- `--envelope-offset`: Envelope offset as fraction of chord (default: 0.02). Adds a small, thin envelope around all NACA sections by offsetting in the outward normal direction. This removes sharp edges (especially at the trailing edge and wing tip), making the wing more 3D printing friendly.
+- `--envelope-offset`: Envelope offset as fraction of chord (default: 0.02). 
+  Adds a small, thin envelope around all NACA sections by offsetting in the outward 
+  normal direction. This removes sharp edges (especially at the trailing edge and 
+  wing tip), making the wing more 3D printing friendly.
 
 **3D Printing Enhancement:**
 
