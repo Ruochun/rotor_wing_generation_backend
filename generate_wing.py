@@ -142,10 +142,10 @@ class WingGenerator:
             offset_points.append(curr_point + normal * offset_distance)
             offset_normals.append(normal)
         
-        # Detect trailing edge: for NACA profiles, it's typically the first point (x ≈ 1.0)
-        # Find the point with maximum x coordinate
+        # Detect trailing edge: for NACA profiles, it's at x ≈ 1.0
+        # Find the point closest to x = 1.0 (most reliable for numerical precision)
         x_coords = profile[:, 0]
-        te_idx = np.argmax(x_coords)
+        te_idx = np.argmin(np.abs(x_coords - 1.0))
         te_point = profile[te_idx]
         
         # Get the normals of points adjacent to the trailing edge
@@ -172,19 +172,20 @@ class WingGenerator:
         result = []
         
         for i in range(n_points):
+            # Always add the regular offset point first
+            result.append(offset_points[i])
+            
             if i == te_idx and n_te_points > 0:
-                # At trailing edge, insert interpolated points for rounding
-                for j in range(n_te_points + 1):
-                    alpha = j / float(n_te_points)
+                # After the trailing edge point, insert interpolated points for rounding
+                # This creates n_te_points intermediate points between this point and the next
+                for j in range(1, n_te_points + 1):
+                    alpha = j / float(n_te_points + 1)
                     # Interpolate angle
                     interp_angle = (1 - alpha) * angle_before + alpha * angle_after
                     # Create normal at this angle
                     interp_normal = np.array([np.cos(interp_angle), np.sin(interp_angle)])
                     # Add offset point
                     result.append(te_point + interp_normal * offset_distance)
-            else:
-                # Regular offset point
-                result.append(offset_points[i])
         
         return np.array(result)
     
