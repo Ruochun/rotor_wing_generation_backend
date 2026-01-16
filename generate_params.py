@@ -245,19 +245,19 @@ def main():
         epilog="""
 Examples:
   # Generate with all defaults (similar to sample_params.csv)
-  python generate_params.py output.csv
+  python generate_params.py input.csv
   
   # Custom overall length and number of wings
-  python generate_params.py output.csv --overall-length 0.03 --n-wings 4
+  python generate_params.py input.csv --overall-length 0.03 --n-wings 4
   
   # Custom chord thickness, camber, and camber location
-  python generate_params.py output.csv --chord-max-thickness 12 --max-camber 5 --max-camber-location 0.3
+  python generate_params.py input.csv --chord-max-thickness 12 --max-camber 5 --max-camber-location 0.3
   
   # Custom chord distribution
-  python generate_params.py output.csv --average-chord-length 0.0025 --chord-length-variance 0.8
+  python generate_params.py input.csv --average-chord-length 0.0025 --chord-length-variance 0.8
   
   # Custom twist angle
-  python generate_params.py output.csv --max-twist-angle 45
+  python generate_params.py input.csv --max-twist-angle 45
         """
     )
     

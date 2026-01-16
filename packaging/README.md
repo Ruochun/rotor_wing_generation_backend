@@ -89,7 +89,7 @@ Share the folders from `dist/`:
 Users can run the executables from the command line by navigating to each folder:
 ```cmd
 cd generate_params
-generate_params.exe output.csv --overall-length 0.03
+generate_params.exe input.csv --overall-length 0.03
 
 cd ..\generate_wing
 generate_wing.exe input.csv --output wing.stl
@@ -100,7 +100,7 @@ analysis.exe input.csv results.csv --rpm 4000
 
 Or by specifying the full path:
 ```cmd
-dist\generate_params\generate_params.exe output.csv --overall-length 0.03
+dist\generate_params\generate_params.exe input.csv --overall-length 0.03
 ```
 
 ### Linux Distribution
@@ -113,7 +113,7 @@ Share the folders from `dist/`:
 Users can run the executables from the terminal by navigating to each folder:
 ```bash
 cd generate_params
-./generate_params output.csv --overall-length 0.03
+./generate_params input.csv --overall-length 0.03
 
 cd ../generate_wing
 ./generate_wing input.csv --output wing.stl
@@ -124,7 +124,7 @@ cd ../analysis
 
 Or by specifying the full path:
 ```bash
-dist/generate_params/generate_params output.csv --overall-length 0.03
+dist/generate_params/generate_params input.csv --overall-length 0.03
 ```
 
 ## File Structure
@@ -218,22 +218,22 @@ After building, test each executable from within its directory:
 ```bash
 # Test generate_params
 cd dist/generate_params
-./generate_params output.csv --n-wings 4
+./generate_params input.csv --n-wings 4
 
 # Test generate_wing (requires a CSV file)
 cd ../generate_wing
-./generate_wing output.csv --output test.stl
+./generate_wing input.csv --output test.stl
 
 # Test analysis (requires a CSV file)
 cd ../analysis
-./analysis output.csv results.csv
+./analysis input.csv results.csv
 ```
 
 Or test using full paths:
 ```bash
-./dist/generate_params/generate_params output.csv --n-wings 4
-./dist/generate_wing/generate_wing output.csv --output test.stl
-./dist/analysis/analysis output.csv results.csv
+./dist/generate_params/generate_params input.csv --n-wings 4
+./dist/generate_wing/generate_wing input.csv --output test.stl
+./dist/analysis/analysis input.csv results.csv
 ```
 
 ## Continuous Integration
