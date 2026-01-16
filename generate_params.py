@@ -180,17 +180,19 @@ def generate_params_csv(
         case_index: Case index for tracking
     
     Note:
-        The root section (section 0) uses the thickest profile to avoid thin wings
-        at the root, while other sections use the parameterized thickness.
+        The root section (section 0) uses a minimum thickness of 35% to avoid thin wings
+        at the root. If chord_max_thickness >= 35, all sections use the same thickness.
+        If chord_max_thickness < 35, root uses 35% while other sections use the input value.
     """
     # Translate abstract requirements to concrete parameters
     naca_code = translate_to_naca_code(chord_max_thickness, max_camber, max_camber_location)
     chord_lengths = generate_chord_lengths(average_chord_length, chord_length_variance, n_sections)
     twist_angles = generate_twist_angles(max_twist_angle, n_sections)
     
-    # Root section uses thickest profile (99% thickness) to avoid thin wings at root
-    # Other sections use the parameterized thickness
-    root_naca_code = translate_to_naca_code(99.0, max_camber, max_camber_location)
+    # Root section uses minimum thickness of 35% to avoid thin wings at root
+    # If input thickness is >= 35, all sections use the same thickness
+    root_thickness = max(chord_max_thickness, 35.0)
+    root_naca_code = translate_to_naca_code(root_thickness, max_camber, max_camber_location)
     naca_codes = [root_naca_code] + [naca_code] * (n_sections - 1)
     
     # Prepare the CSV row
@@ -225,8 +227,11 @@ def generate_params_csv(
     print(f"Generated parameter file: {output_file}")
     print(f"  Overall length: {overall_length}")
     print(f"  Number of wings: {n_wings}")
-    print(f"  Root NACA code: {root_naca_code} (thickest profile)")
-    print(f"  Other sections NACA code: {naca_code} (camber={max_camber}%, camber_location={max_camber_location}, thickness={chord_max_thickness}%)")
+    if root_thickness != chord_max_thickness:
+        print(f"  Root NACA code: {root_naca_code} (thickness={root_thickness}%, minimum enforced)")
+        print(f"  Other sections NACA code: {naca_code} (camber={max_camber}%, camber_location={max_camber_location}, thickness={chord_max_thickness}%)")
+    else:
+        print(f"  NACA code (all sections): {naca_code} (camber={max_camber}%, camber_location={max_camber_location}, thickness={chord_max_thickness}%)")
     print(f"  Chord lengths: {[f'{c:.6f}' for c in chord_lengths]}")
     print(f"  Twist angles: {[f'{t:.1f}' for t in twist_angles]}")
     print(f"  RPM: {rpm}, Density: {rho} kg/m³")
