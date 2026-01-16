@@ -64,6 +64,73 @@ class WingGenerator:
         
         return m, p, t
     
+    def offset_profile(self, profile: np.ndarray, offset_distance: float) -> np.ndarray:
+        """
+        Apply an outward normal offset to a closed 2D profile curve.
+        This creates an envelope around the profile, removing sharp edges.
+        
+        Args:
+            profile: Array of shape (N, 2) with (x, y) coordinates forming a closed loop
+            offset_distance: Distance to offset in the outward normal direction (in profile units)
+            
+        Returns:
+            Array of shape (N, 2) with offset (x, y) coordinates
+        """
+        if offset_distance <= 0:
+            return profile
+        
+        n_points = len(profile)
+        offset_profile = np.zeros_like(profile)
+        
+        for i in range(n_points):
+            # Get neighboring points (with wrapping for closed curve)
+            prev_idx = (i - 1) % n_points
+            next_idx = (i + 1) % n_points
+            
+            prev_point = profile[prev_idx]
+            curr_point = profile[i]
+            next_point = profile[next_idx]
+            
+            # Calculate tangent vectors to the curve at this point
+            tangent1 = curr_point - prev_point
+            tangent2 = next_point - curr_point
+            
+            # Normalize tangent vectors
+            tangent1_norm = np.linalg.norm(tangent1)
+            tangent2_norm = np.linalg.norm(tangent2)
+            
+            if tangent1_norm > 1e-10:
+                tangent1 = tangent1 / tangent1_norm
+            if tangent2_norm > 1e-10:
+                tangent2 = tangent2 / tangent2_norm
+            
+            # Average tangent direction
+            avg_tangent = (tangent1 + tangent2)
+            avg_tangent_norm = np.linalg.norm(avg_tangent)
+            if avg_tangent_norm > 1e-10:
+                avg_tangent = avg_tangent / avg_tangent_norm
+            else:
+                # Fallback to perpendicular of one tangent
+                avg_tangent = tangent1
+            
+            # Outward normal is perpendicular to tangent (rotated 90 degrees CCW)
+            # For a closed curve traversed counter-clockwise, rotating tangent 90° CCW gives outward normal
+            normal = np.array([-avg_tangent[1], avg_tangent[0]])
+            
+            # To ensure outward direction, check if normal points away from curve center
+            # Use a simple heuristic: the centroid of the profile
+            centroid = profile.mean(axis=0)
+            to_centroid = centroid - curr_point
+            
+            # If normal points toward centroid, flip it
+            if np.dot(normal, to_centroid) > 0:
+                normal = -normal
+            
+            # Apply offset
+            offset_profile[i] = curr_point + normal * offset_distance
+        
+        return offset_profile
+    
     def generate_naca4_profile(self, m: float, p: float, t: float, 
                                n_points: int = 100, 
                                closed_te: bool = True) -> np.ndarray:
@@ -331,7 +398,8 @@ class WingGenerator:
     
     def generate_wing_from_params(self, params: Dict, 
                                   n_blend_sections: int = 6,
-                                  n_profile_points: int = 50) -> trimesh.Trimesh:
+                                  n_profile_points: int = 50,
+                                  envelope_offset: float = 0.0) -> trimesh.Trimesh:
         """
         Generate a complete wing mesh from parameter dictionary.
         
@@ -339,6 +407,9 @@ class WingGenerator:
             params: Dictionary of wing parameters
             n_blend_sections: Number of blend sections between defined stations
             n_profile_points: Number of points per airfoil profile side
+            envelope_offset: Offset distance in the outward normal direction (as fraction of chord).
+                           This adds a small envelope around the airfoil to remove sharp edges.
+                           Typical values: 0.01 to 0.05 for 3D printing friendly geometry.
             
         Returns:
             Trimesh object of the wing
@@ -381,6 +452,10 @@ class WingGenerator:
             m, p, t = self.parse_naca4(naca_codes[i])
             profile = self.generate_naca4_profile(m, p, t, n_profile_points)
             
+            # Apply envelope offset if specified
+            if envelope_offset > 0:
+                profile = self.offset_profile(profile, envelope_offset)
+            
             # Use smoothly interpolated chord and twist
             chord = float(chord_interpolator(z_pos))
             twist = float(twist_interpolator(z_pos))
@@ -400,6 +475,10 @@ class WingGenerator:
                     # Blend NACA parameters
                     m, p, t = self.blend_naca_codes(naca_codes[i], naca_codes[i + 1], alpha)
                     profile = self.generate_naca4_profile(m, p, t, n_profile_points)
+                    
+                    # Apply envelope offset if specified
+                    if envelope_offset > 0:
+                        profile = self.offset_profile(profile, envelope_offset)
                     
                     # Use smoothly interpolated chord and twist
                     chord = float(chord_interpolator(z_pos))
@@ -538,7 +617,8 @@ class WingGenerator:
     
     def generate_complete_design(self, params: Dict,
                                 n_blend_sections: int = 6,
-                                n_profile_points: int = 50) -> trimesh.Trimesh:
+                                n_profile_points: int = 50,
+                                envelope_offset: float = 0.0) -> trimesh.Trimesh:
         """
         Generate a complete wing design with multiple wings arranged circularly
         and a central hub with a drilled hole.
@@ -547,12 +627,14 @@ class WingGenerator:
             params: Dictionary of wing parameters
             n_blend_sections: Number of blend sections between defined stations
             n_profile_points: Number of points per airfoil profile side
+            envelope_offset: Offset distance in the outward normal direction (as fraction of chord).
+                           This adds a small envelope around the airfoil to remove sharp edges.
             
         Returns:
             Combined mesh of all wings merged with the hub
         """
         # Generate the base wing
-        base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points)
+        base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points, envelope_offset)
         
         # Fix normals on base wing to ensure they point outward
         # self.fix_normals_outward(base_wing)
@@ -675,6 +757,10 @@ def main():
                        help='Number of blend sections between defined stations (default: 6)')
     parser.add_argument('--profile-points', type=int, default=50,
                        help='Number of points per airfoil side (default: 50)')
+    parser.add_argument('--envelope-offset', type=float, default=0.02,
+                       help='Envelope offset as fraction of chord (default: 0.02). '
+                            'Adds a small, thin envelope around airfoils to remove sharp edges, '
+                            'making the wing more 3D printing friendly.')
     
     args = parser.parse_args()
     
@@ -686,6 +772,7 @@ def main():
     print(f"  Overall length: {params['overall_length']:.6f}")
     print(f"  Number of wings: {params['n_wings']}")
     print(f"  Number of sections: {params['n_sections']}")
+    print(f"  Envelope offset: {args.envelope_offset:.4f} (as fraction of chord)")
     
     # Generate wing
     print("Generating wing geometry...")
@@ -693,7 +780,8 @@ def main():
     wing_mesh = generator.generate_complete_design(
         params, 
         n_blend_sections=args.blend_sections,
-        n_profile_points=args.profile_points
+        n_profile_points=args.profile_points,
+        envelope_offset=args.envelope_offset
     )
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
