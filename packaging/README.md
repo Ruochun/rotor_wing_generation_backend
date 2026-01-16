@@ -31,10 +31,10 @@ cd packaging
 build_windows.bat
 ```
 
-This will create three executables in the `dist/` directory:
-- `generate_params.exe`
-- `generate_wing.exe`
-- `analysis.exe`
+This will create three executables in the `dist/` directory as folders (using --onedir mode for faster startup):
+- `generate_params/` - contains `generate_params.exe` and dependencies
+- `generate_wing/` - contains `generate_wing.exe` and dependencies
+- `analysis/` - contains `analysis.exe` and dependencies
 
 ### Linux
 
@@ -45,10 +45,10 @@ cd packaging
 ./build_linux.sh
 ```
 
-This will create three executables in the `dist/` directory:
-- `generate_params`
-- `generate_wing`
-- `analysis`
+This will create three executables in the `dist/` directory as folders (using --onedir mode for faster startup):
+- `generate_params/` - contains `generate_params` executable and dependencies
+- `generate_wing/` - contains `generate_wing` executable and dependencies
+- `analysis/` - contains `analysis` executable and dependencies
 
 ### macOS
 
@@ -61,16 +61,19 @@ cd packaging
 
 ## What Gets Built
 
-The build process creates three separate executables:
+The build process creates three separate executables using --onedir mode for faster startup:
 
 1. **generate_params** - Generates CSV parameter files from abstract design requirements
 2. **generate_wing** - Generates 3D wing geometry (STL files) from parameter CSVs
 3. **analysis** - Analyzes wing performance using Blade Element Momentum Theory
 
-Each executable is completely standalone and includes:
+Each executable is created as a directory containing:
 - Python interpreter
 - All required Python packages (numpy, scipy, trimesh, manifold3d, networkx)
 - The corresponding Python script
+- The main executable file
+
+The --onedir mode is used by default instead of --onefile because it provides faster startup times.
 
 ## Distribution
 
@@ -78,30 +81,50 @@ After building, you can distribute the executables to users. The executables wor
 
 ### Windows Distribution
 
-Share the files from `dist/`:
-- `generate_params.exe`
-- `generate_wing.exe`
-- `analysis.exe`
+Share the folders from `dist/`:
+- `generate_params/` folder (contains `generate_params.exe`)
+- `generate_wing/` folder (contains `generate_wing.exe`)
+- `analysis/` folder (contains `analysis.exe`)
 
-Users can run them from the command line:
+Users can run the executables from the command line by navigating to each folder:
 ```cmd
+cd generate_params
 generate_params.exe output.csv --overall-length 0.03
+
+cd ..\generate_wing
 generate_wing.exe input.csv --output wing.stl
+
+cd ..\analysis
 analysis.exe input.csv results.csv --rpm 4000
+```
+
+Or by specifying the full path:
+```cmd
+dist\generate_params\generate_params.exe output.csv --overall-length 0.03
 ```
 
 ### Linux Distribution
 
-Share the files from `dist/`:
-- `generate_params`
-- `generate_wing`
-- `analysis`
+Share the folders from `dist/`:
+- `generate_params/` folder (contains `generate_params` executable)
+- `generate_wing/` folder (contains `generate_wing` executable)
+- `analysis/` folder (contains `analysis` executable)
 
-Users can run them from the terminal:
+Users can run the executables from the terminal by navigating to each folder:
 ```bash
+cd generate_params
 ./generate_params output.csv --overall-length 0.03
+
+cd ../generate_wing
 ./generate_wing input.csv --output wing.stl
+
+cd ../analysis
 ./analysis input.csv results.csv --rpm 4000
+```
+
+Or by specifying the full path:
+```bash
+dist/generate_params/generate_params output.csv --overall-length 0.03
 ```
 
 ## File Structure
@@ -144,8 +167,9 @@ The build scripts use these PyInstaller options:
 - `--clean`: Remove temporary files before building
 - `--noconfirm`: Overwrite output directory without asking
 
-Additional useful options:
-- `--onedir`: Create a directory with executable and dependencies (faster startup)
+The spec files are configured to use `--onedir` mode by default (creating a directory with executable and dependencies) for faster startup times. This is preferred over `--onefile` mode which bundles everything into a single executable but has slower startup.
+
+Additional useful options for customization:
 - `--debug`: Enable debugging output
 - `--log-level LEVEL`: Set logging verbosity
 
@@ -172,10 +196,11 @@ hiddenimports=[
 
 ### "Executable is too large"
 
-The executables bundle all dependencies. To reduce size:
+The executables bundle all dependencies. The default --onedir mode already optimizes for faster startup. To reduce size:
 1. Use `--exclude-module` to exclude unnecessary packages
 2. Use UPX compression (already enabled with `upx=True`)
-3. Consider using `--onedir` mode instead of `--onefile`
+
+Note: The --onedir mode is now used by default instead of --onefile, which provides faster startup times at the cost of distributing a folder instead of a single file.
 
 ### "Different platforms"
 
@@ -188,17 +213,27 @@ To support multiple platforms, build on each target platform separately.
 
 ## Testing the Executables
 
-After building, test each executable:
+After building, test each executable from within its directory:
 
 ```bash
 # Test generate_params
-./dist/generate_params output.csv --n-wings 4
+cd dist/generate_params
+./generate_params output.csv --n-wings 4
 
 # Test generate_wing (requires a CSV file)
-./dist/generate_wing output.csv --output test.stl
+cd ../generate_wing
+./generate_wing output.csv --output test.stl
 
 # Test analysis (requires a CSV file)
-./dist/analysis output.csv results.csv
+cd ../analysis
+./analysis output.csv results.csv
+```
+
+Or test using full paths:
+```bash
+./dist/generate_params/generate_params output.csv --n-wings 4
+./dist/generate_wing/generate_wing output.csv --output test.stl
+./dist/analysis/analysis output.csv results.csv
 ```
 
 ## Continuous Integration
