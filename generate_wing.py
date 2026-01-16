@@ -527,12 +527,11 @@ class WingGenerator:
         # Mirror across XY plane by negating Z coordinates
         mirrored_mesh.vertices[:, 2] *= -1
         
-        # Flip face winding order to maintain outward normals
-        # When we mirror geometry, the normal direction inverts, so we need to
-        # reverse the vertex order in each face to flip the normals back.
+        # Flip face winding order to correct normals inverted by Z-coordinate negation
+        # Step 1 (above): Negating Z-coordinates mirrors geometry but inverts normals
+        # Step 2 (here): Reversing vertex order in each face flips normals back outward
         # np.fliplr() reverses each row (face) in the faces array from [v0, v1, v2]
         # to [v2, v1, v0], which reverses the winding order and thus the normal direction.
-        # This ensures normals continue pointing outward after mirroring.
         mirrored_mesh.faces = np.fliplr(mirrored_mesh.faces)
         
         return mirrored_mesh
