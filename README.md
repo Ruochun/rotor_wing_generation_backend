@@ -78,7 +78,8 @@ Both files maintain proper outward-pointing normals for correct 3D printing and 
 **Example:**
 
 ```bash
-# Generate wing from parameters (creates wing.stl and wing_cw.stl)
+# Generate wing from parameters
+# This creates two files: wing.stl (CCW) and wing_cw.stl (CW)
 python generate_wing.py sample_params.csv --output wing.stl
 ```
 

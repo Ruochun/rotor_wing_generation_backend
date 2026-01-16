@@ -16,9 +16,10 @@ The system supports the 34-parameter wing design format used in this project:
 import csv
 import math
 import os
+from typing import List, Tuple, Dict, Optional
+
 import numpy as np
 import trimesh
-from typing import List, Tuple, Dict, Optional
 from scipy import interpolate
 
 
@@ -528,7 +529,10 @@ class WingGenerator:
         
         # Flip face winding order to maintain outward normals
         # When we mirror geometry, the normal direction inverts, so we need to
-        # reverse the vertex order in each face to flip the normals back
+        # reverse the vertex order in each face to flip the normals back.
+        # np.fliplr() reverses each row (face) in the faces array from [v0, v1, v2]
+        # to [v2, v1, v0], which reverses the winding order and thus the normal direction.
+        # This ensures normals continue pointing outward after mirroring.
         mirrored_mesh.faces = np.fliplr(mirrored_mesh.faces)
         
         return mirrored_mesh
