@@ -52,7 +52,7 @@ python generate_params.py output.csv --overall-length 0.04 --n-wings 2 --average
 
 ### `generate_wing.py`
 
-Generates 3D wing geometry from CSV parameters and exports as STL file.
+Generates 3D wing geometry from CSV parameters and exports as STL file. **Automatically creates both counterclockwise (CCW) and clockwise (CW) versions** of the wing design.
 
 **Usage:**
 
@@ -67,10 +67,18 @@ python generate_wing.py input.csv --output wing.stl [options]
 - `--blend-sections`: Number of blend sections between defined stations (default: 6)
 - `--profile-points`: Number of points per airfoil side (default: 50)
 
+**Output:**
+
+The script generates **two STL files**:
+- `<filename>.stl` - Counterclockwise rotation version (standard convention)
+- `<filename>_cw.stl` - Clockwise rotation version (mirrored across XY plane with corrected normals)
+
+Both files maintain proper outward-pointing normals for correct 3D printing and visualization.
+
 **Example:**
 
 ```bash
-# Generate wing from parameters
+# Generate wing from parameters (creates wing.stl and wing_cw.stl)
 python generate_wing.py sample_params.csv --output wing.stl
 ```
 
@@ -138,8 +146,9 @@ python generate_params.py custom_params.csv \
     --max-twist-angle 45 \
     --n-wings 4
 
-# Step 2: Generate 3D wing geometry
+# Step 2: Generate 3D wing geometry (creates both CCW and CW versions)
 python generate_wing.py custom_params.csv --output custom_wing.stl
+# This creates: custom_wing.stl (CCW) and custom_wing_cw.stl (CW)
 
 # Step 3: Analyze wing performance
 python analysis.py custom_params.csv custom_analysis.csv --rpm 3000
