@@ -15,6 +15,7 @@ The system supports the 34-parameter wing design format used in this project:
 
 import csv
 import math
+import os
 import numpy as np
 import trimesh
 from typing import List, Tuple, Dict, Optional
@@ -704,7 +705,6 @@ def main():
     
     # Determine output filename for clockwise version
     # Split the filename to insert "_cw" before the extension
-    import os
     base_name, ext = os.path.splitext(args.output)
     cw_output = f"{base_name}_cw{ext}"
     
