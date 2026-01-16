@@ -16,7 +16,7 @@ from typing import List
 MAX_POSITION_DIGIT = 9  # Maximum value for NACA position digit
 
 # Chord length constants
-ROOT_CHORD_LENGTH = 0.003  # Fixed chord length at root for rotor hub union
+ROOT_CHORD_LENGTH = 0.0025  # Fixed chord length at root for rotor hub union
 
 
 def translate_to_naca_code(max_thickness: float, max_camber: float, max_camber_location: float) -> str:
