@@ -231,7 +231,7 @@ def generate_params_csv(
         print(f"  Root NACA code: {root_naca_code} (thickness={root_thickness}%, minimum enforced)")
         print(f"  Other sections NACA code: {naca_code} (camber={max_camber}%, camber_location={max_camber_location}, thickness={chord_max_thickness}%)")
     else:
-        print(f"  NACA code (all sections): {naca_code} (camber={max_camber}%, camber_location={max_camber_location}, thickness={chord_max_thickness}%)")
+        print(f"  NACA code (all sections): {root_naca_code} (camber={max_camber}%, camber_location={max_camber_location}, thickness={chord_max_thickness}%)")
     print(f"  Chord lengths: {[f'{c:.6f}' for c in chord_lengths]}")
     print(f"  Twist angles: {[f'{t:.1f}' for t in twist_angles]}")
     print(f"  RPM: {rpm}, Density: {rho} kg/m³")
