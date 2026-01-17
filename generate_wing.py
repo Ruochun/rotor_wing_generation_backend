@@ -84,7 +84,12 @@ class WingGenerator:
         if offset_distance <= 0:
             return profile
         
+        if n_te_points < 0:
+            raise ValueError(f"n_te_points must be non-negative, got {n_te_points}")
+        
         n_points = len(profile)
+        if n_points < 3:
+            raise ValueError(f"Profile must have at least 3 points, got {n_points}")
         
         # Calculate centroid once for all points
         centroid = profile.mean(axis=0)
@@ -501,6 +506,12 @@ class WingGenerator:
         # The overall_length parameter represents the distance from rotor center to wing tip,
         # but we offset the wing start by Z_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
         # Therefore, the actual wing length should be reduced by this offset.
+        if overall_length <= Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
+            raise ValueError(
+                f"overall_length ({overall_length}) must be greater than "
+                f"Z_OFFSET_OF_BLADES_FOR_BOOLEAN ({Z_OFFSET_OF_BLADES_FOR_BOOLEAN})"
+            )
+        
         actual_wing_length = overall_length - Z_OFFSET_OF_BLADES_FOR_BOOLEAN
         
         # Generate section positions
