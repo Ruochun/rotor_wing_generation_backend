@@ -22,6 +22,7 @@ import numpy as np
 import trimesh
 from scipy import interpolate
 
+Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.0015
 
 class WingGenerator:
     """
@@ -37,7 +38,7 @@ class WingGenerator:
     
     def __init__(self):
         """Initialize the wing generator."""
-        self.wing_start_location = np.array([0.0, 0.0, 0.0015])
+        self.wing_start_location = np.array([0.0, 0.0, Z_OFFSET_OF_BLADES_FOR_BOOLEAN])
         self.revolve_center = np.array([0.0, 0.0, 0.0])
         self.revolve_axis = np.array([0.0, 1.0, 0.0])
         
@@ -63,6 +64,153 @@ class WingGenerator:
         t = int(s[2:]) / 100.0 # Maximum thickness
         
         return m, p, t
+    
+    def offset_profile(self, profile: np.ndarray, offset_distance: float, 
+                      n_te_points: int = 8) -> np.ndarray:
+        """
+        Apply an outward normal offset to a closed 2D profile curve.
+        This creates an envelope around the profile, removing sharp edges.
+        At the trailing edge, creates a smooth rounded cap by interpolating
+        multiple offset directions.
+        
+        Args:
+            profile: Array of shape (N, 2) with (x, y) coordinates forming a closed loop
+            offset_distance: Distance to offset in the outward normal direction (in profile units)
+            n_te_points: Number of intermediate points to add at the trailing edge for rounding
+            
+        Returns:
+            Array of shape (N+n_te_points, 2) with offset (x, y) coordinates
+        """
+        if offset_distance <= 0:
+            return profile
+        
+        if n_te_points < 0:
+            raise ValueError(f"n_te_points must be non-negative, got {n_te_points}")
+        
+        n_points = len(profile)
+        if n_points < 3:
+            raise ValueError(f"Profile must have at least 3 points, got {n_points}")
+        
+        # Calculate centroid once for all points
+        centroid = profile.mean(axis=0)
+        
+        # First pass: calculate offset for all original points
+        offset_points = []
+        offset_normals = []
+        
+        for i in range(n_points):
+            # Get neighboring points (with wrapping for closed curve)
+            prev_idx = (i - 1) % n_points
+            next_idx = (i + 1) % n_points
+            
+            prev_point = profile[prev_idx]
+            curr_point = profile[i]
+            next_point = profile[next_idx]
+            
+            # Calculate tangent vectors to the curve at this point
+            tangent1 = curr_point - prev_point
+            tangent2 = next_point - curr_point
+            
+            # Normalize tangent vectors
+            tangent1_norm = np.linalg.norm(tangent1)
+            tangent2_norm = np.linalg.norm(tangent2)
+            
+            if tangent1_norm > 1e-10:
+                tangent1 = tangent1 / tangent1_norm
+            if tangent2_norm > 1e-10:
+                tangent2 = tangent2 / tangent2_norm
+            
+            # Average tangent direction
+            avg_tangent = (tangent1 + tangent2)
+            avg_tangent_norm = np.linalg.norm(avg_tangent)
+            if avg_tangent_norm > 1e-10:
+                avg_tangent = avg_tangent / avg_tangent_norm
+            else:
+                # Fallback: use perpendicular to tangent1 when they oppose
+                # tangent1 is already normalized at this point
+                if tangent1_norm > 1e-10:
+                    avg_tangent = np.array([-tangent1[1], tangent1[0]])
+                else:
+                    # Both tangents are degenerate, use perpendicular to tangent2
+                    avg_tangent = np.array([-tangent2[1], tangent2[0]])
+            
+            # Normal is perpendicular to tangent (rotated 90 degrees)
+            normal = np.array([-avg_tangent[1], avg_tangent[0]])
+            
+            # Ensure outward direction by checking distance from centroid
+            to_centroid = centroid - curr_point
+            
+            # If normal points toward centroid, flip it
+            if np.dot(normal, to_centroid) > 0:
+                normal = -normal
+            
+            # Store offset point and normal
+            offset_points.append(curr_point + normal * offset_distance)
+            offset_normals.append(normal)
+        
+        # Detect trailing edge: for NACA profiles, it's at x ≈ 1.0
+        # Find the point closest to x = 1.0 (most reliable for numerical precision)
+        x_coords = profile[:, 0]
+        te_idx = np.argmin(np.abs(x_coords - 1.0))
+        te_point = profile[te_idx]
+        
+        if n_te_points == 0:
+            # No TE rounding, return the simple offset
+            return np.array(offset_points)
+        
+        # For proper connectivity, we need to split the profile at the trailing edge
+        # and insert the interpolated points to create a smooth rounded cap
+        
+        # Get the normals of points adjacent to the trailing edge
+        prev_te_idx = (te_idx - 1) % n_points
+        next_te_idx = (te_idx + 1) % n_points
+        
+        normal_before = offset_normals[prev_te_idx]
+        normal_after = offset_normals[next_te_idx]
+        
+        # Calculate angles of the normals
+        angle_before = np.arctan2(normal_before[1], normal_before[0])
+        angle_after = np.arctan2(normal_after[1], normal_after[0])
+        
+        # Ensure we interpolate the shorter arc
+        # If the angular difference is greater than π, adjust
+        angle_diff = angle_after - angle_before
+        if angle_diff > np.pi:
+            angle_after -= 2 * np.pi
+        elif angle_diff < -np.pi:
+            angle_after += 2 * np.pi
+        
+        # Build the result with proper ordering:
+        # - Start from point after TE (te_idx + 1)
+        # - Go around to the point before TE (te_idx - 1)
+        # - Add the point before TE
+        # - Add interpolated TE points
+        # - Add the TE point
+        # This maintains smooth connectivity
+        result = []
+        
+        # Add points from after TE to before TE (wrapping around)
+        for i in range(n_points):
+            idx = (te_idx + 1 + i) % n_points
+            if idx == te_idx:
+                # We're back at the TE, stop here
+                break
+            result.append(offset_points[idx])
+        
+        # Now add the interpolated TE cap points
+        for j in range(n_te_points):
+            alpha = (j + 1) / (n_te_points + 1)
+            # Interpolate angle from before to after
+            interp_angle = (1 - alpha) * angle_before + alpha * angle_after
+            # Create normal at this angle
+            interp_normal = np.array([np.cos(interp_angle), np.sin(interp_angle)])
+            # Add offset point
+            result.append(te_point + interp_normal * offset_distance)
+        
+        # Finally add the TE point itself
+        result.append(offset_points[te_idx])
+        
+        return np.array(result)
     
     def generate_naca4_profile(self, m: float, p: float, t: float, 
                                n_points: int = 100, 
@@ -331,7 +479,8 @@ class WingGenerator:
     
     def generate_wing_from_params(self, params: Dict, 
                                   n_blend_sections: int = 6,
-                                  n_profile_points: int = 50) -> trimesh.Trimesh:
+                                  n_profile_points: int = 50,
+                                  envelope_offset: float = 0.0) -> trimesh.Trimesh:
         """
         Generate a complete wing mesh from parameter dictionary.
         
@@ -339,6 +488,9 @@ class WingGenerator:
             params: Dictionary of wing parameters
             n_blend_sections: Number of blend sections between defined stations
             n_profile_points: Number of points per airfoil profile side
+            envelope_offset: Offset distance in the outward normal direction (as fraction of chord).
+                           This adds a small envelope around the airfoil to remove sharp edges.
+                           Typical values: 0.01 to 0.05 for 3D printing friendly geometry.
             
         Returns:
             Trimesh object of the wing
@@ -350,8 +502,20 @@ class WingGenerator:
         twist_angles = [params[f'twist_{i}'] for i in range(n_sections)]
         chord_lengths = [params[f'chord_{i}'] for i in range(n_sections)]
         
+        # Account for Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
+        # The overall_length parameter represents the distance from rotor center to wing tip,
+        # but we offset the wing start by Z_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
+        # Therefore, the actual wing length should be reduced by this offset.
+        if overall_length <= Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
+            raise ValueError(
+                f"overall_length ({overall_length}) must be greater than "
+                f"Z_OFFSET_OF_BLADES_FOR_BOOLEAN ({Z_OFFSET_OF_BLADES_FOR_BOOLEAN})"
+            )
+        
+        actual_wing_length = overall_length - Z_OFFSET_OF_BLADES_FOR_BOOLEAN
+        
         # Generate section positions
-        section_positions = np.linspace(0, overall_length, n_sections)
+        section_positions = np.linspace(0, actual_wing_length, n_sections)
         
         # Create smooth interpolators for chord and twist
         # This treats the specified values as control points for smooth curves
@@ -381,6 +545,9 @@ class WingGenerator:
             m, p, t = self.parse_naca4(naca_codes[i])
             profile = self.generate_naca4_profile(m, p, t, n_profile_points)
             
+            # Apply envelope offset (offset_profile handles offset <= 0 case)
+            profile = self.offset_profile(profile, envelope_offset)
+            
             # Use smoothly interpolated chord and twist
             chord = float(chord_interpolator(z_pos))
             twist = float(twist_interpolator(z_pos))
@@ -400,6 +567,9 @@ class WingGenerator:
                     # Blend NACA parameters
                     m, p, t = self.blend_naca_codes(naca_codes[i], naca_codes[i + 1], alpha)
                     profile = self.generate_naca4_profile(m, p, t, n_profile_points)
+                    
+                    # Apply envelope offset (offset_profile handles offset <= 0 case)
+                    profile = self.offset_profile(profile, envelope_offset)
                     
                     # Use smoothly interpolated chord and twist
                     chord = float(chord_interpolator(z_pos))
@@ -538,7 +708,8 @@ class WingGenerator:
     
     def generate_complete_design(self, params: Dict,
                                 n_blend_sections: int = 6,
-                                n_profile_points: int = 50) -> trimesh.Trimesh:
+                                n_profile_points: int = 50,
+                                envelope_offset: float = 0.0) -> trimesh.Trimesh:
         """
         Generate a complete wing design with multiple wings arranged circularly
         and a central hub with a drilled hole.
@@ -547,12 +718,14 @@ class WingGenerator:
             params: Dictionary of wing parameters
             n_blend_sections: Number of blend sections between defined stations
             n_profile_points: Number of points per airfoil profile side
+            envelope_offset: Offset distance in the outward normal direction (as fraction of chord).
+                           This adds a small envelope around the airfoil to remove sharp edges.
             
         Returns:
             Combined mesh of all wings merged with the hub
         """
         # Generate the base wing
-        base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points)
+        base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points, envelope_offset)
         
         # Fix normals on base wing to ensure they point outward
         # self.fix_normals_outward(base_wing)
@@ -675,6 +848,10 @@ def main():
                        help='Number of blend sections between defined stations (default: 6)')
     parser.add_argument('--profile-points', type=int, default=50,
                        help='Number of points per airfoil side (default: 50)')
+    parser.add_argument('--envelope-offset', type=float, default=0.03,
+                       help='Envelope offset as fraction of chord (default: 0.03). '
+                            'Adds a small, thin envelope around airfoils to remove sharp edges, '
+                            'making the wing more 3D printing friendly.')
     
     args = parser.parse_args()
     
@@ -686,6 +863,7 @@ def main():
     print(f"  Overall length: {params['overall_length']:.6f}")
     print(f"  Number of wings: {params['n_wings']}")
     print(f"  Number of sections: {params['n_sections']}")
+    print(f"  Envelope offset: {args.envelope_offset:.4f} (as fraction of chord)")
     
     # Generate wing
     print("Generating wing geometry...")
@@ -693,7 +871,8 @@ def main():
     wing_mesh = generator.generate_complete_design(
         params, 
         n_blend_sections=args.blend_sections,
-        n_profile_points=args.profile_points
+        n_profile_points=args.profile_points,
+        envelope_offset=args.envelope_offset
     )
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
