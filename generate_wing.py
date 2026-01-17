@@ -22,6 +22,7 @@ import numpy as np
 import trimesh
 from scipy import interpolate
 
+Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.0015
 
 class WingGenerator:
     """
@@ -37,7 +38,7 @@ class WingGenerator:
     
     def __init__(self):
         """Initialize the wing generator."""
-        self.wing_start_location = np.array([0.0, 0.0, 0.0015])
+        self.wing_start_location = np.array([0.0, 0.0, Z_OFFSET_OF_BLADES_FOR_BOOLEAN])
         self.revolve_center = np.array([0.0, 0.0, 0.0])
         self.revolve_axis = np.array([0.0, 1.0, 0.0])
         
@@ -813,8 +814,8 @@ def main():
                        help='Number of blend sections between defined stations (default: 6)')
     parser.add_argument('--profile-points', type=int, default=50,
                        help='Number of points per airfoil side (default: 50)')
-    parser.add_argument('--envelope-offset', type=float, default=0.02,
-                       help='Envelope offset as fraction of chord (default: 0.02). '
+    parser.add_argument('--envelope-offset', type=float, default=0.03,
+                       help='Envelope offset as fraction of chord (default: 0.03). '
                             'Adds a small, thin envelope around airfoils to remove sharp edges, '
                             'making the wing more 3D printing friendly.')
     
