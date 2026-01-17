@@ -149,8 +149,14 @@ class WingGenerator:
         te_idx = np.argmin(np.abs(x_coords - 1.0))
         te_point = profile[te_idx]
         
+        if n_te_points == 0:
+            # No TE rounding, return the simple offset
+            return np.array(offset_points)
+        
+        # For proper connectivity, we need to split the profile at the trailing edge
+        # and insert the interpolated points to create a smooth rounded cap
+        
         # Get the normals of points adjacent to the trailing edge
-        # These define the angular range to interpolate
         prev_te_idx = (te_idx - 1) % n_points
         next_te_idx = (te_idx + 1) % n_points
         
@@ -169,24 +175,35 @@ class WingGenerator:
         elif angle_diff < -np.pi:
             angle_after += 2 * np.pi
         
-        # Create the final offset profile with rounded trailing edge
+        # Build the result with proper ordering:
+        # - Start from point after TE (te_idx + 1)
+        # - Go around to the point before TE (te_idx - 1)
+        # - Add the point before TE
+        # - Add interpolated TE points
+        # - Add the TE point
+        # This maintains smooth connectivity
         result = []
         
+        # Add points from after TE to before TE (wrapping around)
         for i in range(n_points):
-            # Always add the regular offset point first
-            result.append(offset_points[i])
-            
-            if i == te_idx and n_te_points > 0:
-                # After the trailing edge point, insert interpolated points for rounding
-                # This creates n_te_points intermediate points between this point and the next
-                for j in range(1, n_te_points + 1):
-                    alpha = j / float(n_te_points + 1)
-                    # Interpolate angle
-                    interp_angle = (1 - alpha) * angle_before + alpha * angle_after
-                    # Create normal at this angle
-                    interp_normal = np.array([np.cos(interp_angle), np.sin(interp_angle)])
-                    # Add offset point
-                    result.append(te_point + interp_normal * offset_distance)
+            idx = (te_idx + 1 + i) % n_points
+            if idx == te_idx:
+                # We're back at the TE, stop here
+                break
+            result.append(offset_points[idx])
+        
+        # Now add the interpolated TE cap points
+        for j in range(n_te_points):
+            alpha = (j + 1) / (n_te_points + 1)
+            # Interpolate angle from before to after
+            interp_angle = (1 - alpha) * angle_before + alpha * angle_after
+            # Create normal at this angle
+            interp_normal = np.array([np.cos(interp_angle), np.sin(interp_angle)])
+            # Add offset point
+            result.append(te_point + interp_normal * offset_distance)
+        
+        # Finally add the TE point itself
+        result.append(offset_points[te_idx])
         
         return np.array(result)
     
@@ -480,8 +497,14 @@ class WingGenerator:
         twist_angles = [params[f'twist_{i}'] for i in range(n_sections)]
         chord_lengths = [params[f'chord_{i}'] for i in range(n_sections)]
         
+        # Account for Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
+        # The overall_length parameter represents the distance from rotor center to wing tip,
+        # but we offset the wing start by Z_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
+        # Therefore, the actual wing length should be reduced by this offset.
+        actual_wing_length = overall_length - Z_OFFSET_OF_BLADES_FOR_BOOLEAN
+        
         # Generate section positions
-        section_positions = np.linspace(0, overall_length, n_sections)
+        section_positions = np.linspace(0, actual_wing_length, n_sections)
         
         # Create smooth interpolators for chord and twist
         # This treats the specified values as control points for smooth curves
