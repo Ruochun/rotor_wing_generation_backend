@@ -189,12 +189,24 @@ class WingGenerator:
         # For proper connectivity, we need to split the profile at the trailing edge
         # and insert the interpolated points to create a smooth rounded cap
         
-        # Get the normals of points adjacent to the trailing edge
-        prev_te_idx = (te_idx - 1) % n_points
-        next_te_idx = (te_idx + 1) % n_points
+        # NACA profiles have two TE points: upper (usually idx 0) and lower (usually idx n-1)
+        # Find both TE points to get proper normals for interpolation
+        te_distances = np.abs(x_coords - 1.0)
+        te_indices = np.argsort(te_distances)[:2]  # Get two closest points to x=1.0
         
-        normal_before = offset_normals[prev_te_idx]
-        normal_after = offset_normals[next_te_idx]
+        # Sort by index to determine which is upper and which is lower
+        # Profile goes: upper_TE → LE → lower_TE, so lower index is upper TE
+        upper_te_idx = min(te_indices)
+        lower_te_idx = max(te_indices)
+        
+        # Use the normals at the actual TE points (not adjacent points)
+        # This avoids the issue where adjacent points are on opposite surfaces
+        normal_upper = offset_normals[upper_te_idx]
+        normal_lower = offset_normals[lower_te_idx]
+        
+        # For interpolation, we go from lower surface to upper surface around the TE
+        normal_before = normal_lower
+        normal_after = normal_upper
         
         # Calculate angles of the normals
         angle_before = np.arctan2(normal_before[1], normal_before[0])
