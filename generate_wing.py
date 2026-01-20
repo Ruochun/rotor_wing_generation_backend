@@ -26,6 +26,7 @@ Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.0015
 
 # Tip fillet constants
 TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value) × original (default: 92% of original)
+TIP_FILLET_EXTENSION_FACTOR = 0.03  # Fillet extends beyond last section by this factor × tip_chord (default: 3% of chord)
 TIP_FILLET_REDUCTION_EXPONENT = 1.5  # Power curve exponent for smooth tapering (higher = steeper taper)
 
 class WingGenerator:
@@ -500,6 +501,8 @@ class WingGenerator:
                            These sections progressively decrease in size toward the tip to create
                            a smooth rounded tip edge. The size reduction is controlled by the
                            TIP_FILLET_SIZE_REDUCTION constant (default: 0.08, creating 92% final size).
+                           The extension distance is controlled by TIP_FILLET_EXTENSION_FACTOR constant
+                           (default: 0.03, extending 3% of tip chord).
             
         Returns:
             Trimesh object of the wing
@@ -603,9 +606,9 @@ class WingGenerator:
             final_size_factor = 1.0 - TIP_FILLET_SIZE_REDUCTION
             
             # Calculate spacing for fillet sections
-            # The fillet extension is controlled by TIP_FILLET_SIZE_REDUCTION
-            # Extension = chord × TIP_FILLET_SIZE_REDUCTION
-            fillet_extension = last_chord * TIP_FILLET_SIZE_REDUCTION
+            # The fillet extension is controlled by TIP_FILLET_EXTENSION_FACTOR
+            # Extension = chord × TIP_FILLET_EXTENSION_FACTOR
+            fillet_extension = last_chord * TIP_FILLET_EXTENSION_FACTOR
             
             for k in range(1, n_tip_fillet_sections + 1):
                 # Progressive reduction factor using smooth power curve
@@ -788,7 +791,8 @@ class WingGenerator:
             n_tip_fillet_sections: Number of additional sections at tip for filleting (default: 5).
                            These sections progressively decrease in size toward the tip to create
                            a smooth rounded tip edge. The size reduction is controlled by the
-                           TIP_FILLET_SIZE_REDUCTION constant (default: 0.08).
+                           TIP_FILLET_SIZE_REDUCTION constant (default: 0.08). The extension distance
+                           is controlled by TIP_FILLET_EXTENSION_FACTOR constant (default: 0.03).
             
         Returns:
             Combined mesh of all wings merged with the hub
@@ -925,8 +929,9 @@ def main():
     parser.add_argument('--tip-fillet-sections', type=int, default=5,
                        help='Number of additional tip fillet sections (default: 5). '
                             'These sections progressively decrease in size toward the tip, '
-                            'creating a smooth rounded tip edge. The final size is controlled by '
-                            'the TIP_FILLET_SIZE_REDUCTION constant (default: 0.08, creating 92%% final size).')
+                            'creating a smooth rounded tip edge. Size reduction controlled by '
+                            'TIP_FILLET_SIZE_REDUCTION (default: 0.08, 92%% final size). Extension '
+                            'controlled by TIP_FILLET_EXTENSION_FACTOR (default: 0.03, 3%% of chord).')
     
     args = parser.parse_args()
     

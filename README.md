@@ -74,8 +74,8 @@ python generate_wing.py input.csv --output wing.stl [options]
   wing tip), making the wing more 3D printing friendly.
 - `--tip-fillet-sections`: Number of additional sections at the wing tip for filleting (default: 5).
   These sections progressively decrease in size toward the tip, creating a smooth rounded 
-  tip edge. The fillet size reduction is controlled by the `TIP_FILLET_SIZE_REDUCTION` constant
-  (default: 0.08, creating 92% final size). Higher values create smoother fillets. Set to 0 to disable.
+  tip edge. Size reduction controlled by `TIP_FILLET_SIZE_REDUCTION` (default: 0.08, 92% final size).
+  Extension controlled by `TIP_FILLET_EXTENSION_FACTOR` (default: 0.03). Set to 0 to disable.
 
 **3D Printing Enhancement:**
 
@@ -96,10 +96,13 @@ To disable the envelope (not recommended for 3D printing), set `--envelope-offse
 The `--tip-fillet-sections` parameter adds progressively smaller NACA sections at the wing tip:
 - Creates a smooth rounded tip edge instead of a flat cap
 - Each fillet section decreases in chord and thickness using a smooth power curve
-- The fillet size reduction is controlled by the `TIP_FILLET_SIZE_REDUCTION` constant:
-  - Default value: 0.08 (final fillet section is 92% of the original tip section size)
-  - The fillet extends beyond the final defined section by (TIP_FILLET_SIZE_REDUCTION × tip_chord)
-  - To customize, modify the constant in the code
+- Two independent constants control the fillet behavior:
+  - **Size reduction**: `TIP_FILLET_SIZE_REDUCTION` (default: 0.08)
+    - Controls how much the sections shrink: final section is 92% of original tip size
+  - **Extension distance**: `TIP_FILLET_EXTENSION_FACTOR` (default: 0.03)
+    - Controls how far the fillet extends: extends 3% of tip chord beyond the final section
+  - These are independent: size reduction ≠ extension distance
+  - To customize, modify the constants in the code
 - Default of 5 sections provides good smoothness
 - Higher values (e.g., 7-10) create even smoother, more gradual fillets
 - Set to 0 to disable tip filleting and use a flat cap instead
