@@ -77,7 +77,7 @@ python generate_wing.py input.csv --output rotors.stl [options]
 - `--tip-fillet-sections`: Number of additional sections at the wing tip for filleting (default: 5).
   These sections progressively decrease in size toward the tip, creating a smooth rounded 
   tip edge. Size reduction controlled by `TIP_FILLET_SIZE_REDUCTION` (default: 0.08, 92% final size).
-  Extension controlled by `TIP_FILLET_EXTENSION_FACTOR` (default: 0.03). Set to 0 to disable.
+  Extension controlled by `TIP_FILLET_EXTENSION_FACTOR` (default: 0.045, 4.5% of chord). Set to 0 to disable.
 
 **3D Printing Enhancement:**
 
@@ -101,8 +101,8 @@ The `--tip-fillet-sections` parameter adds progressively smaller NACA sections a
 - Two independent constants control the fillet behavior:
   - **Size reduction**: `TIP_FILLET_SIZE_REDUCTION` (default: 0.08)
     - Controls how much the sections shrink: final section is 92% of original tip size
-  - **Extension distance**: `TIP_FILLET_EXTENSION_FACTOR` (default: 0.03)
-    - Controls how far the fillet extends: extends 3% of tip chord beyond the final section
+  - **Extension distance**: `TIP_FILLET_EXTENSION_FACTOR` (default: 0.045)
+    - Controls how far the fillet extends: extends 4.5% of tip chord beyond the final section
   - These are independent: size reduction ≠ extension distance
   - To customize, modify the constants in the code
 - Default of 5 sections provides good smoothness
