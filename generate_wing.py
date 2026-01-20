@@ -24,6 +24,10 @@ from scipy import interpolate
 
 Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.0015
 
+# Tip fillet constants
+TIP_FILLET_EXTENSION_FACTOR = 0.5  # Fillet extends beyond last section by this factor × tip chord
+TIP_FILLET_REDUCTION_EXPONENT = 1.5  # Power curve exponent for smooth tapering (higher = steeper taper)
+
 class WingGenerator:
     """
     Generates 3D wing geometry from parametric design specifications.
@@ -566,7 +570,7 @@ class WingGenerator:
             if i < n_sections - 1:
                 for k in range(1, n_blend_sections + 1):
                     z_pos = all_positions[section_idx]
-                    alpha = k / float(n_blend_sections + 1)
+                    alpha = k / (n_blend_sections + 1)
                     
                     # Blend NACA parameters
                     m, p, t = self.blend_naca_codes(naca_codes[i], naca_codes[i + 1], alpha)
@@ -595,18 +599,18 @@ class WingGenerator:
             
             # Calculate spacing for fillet sections
             # Extend beyond the last section by a distance proportional to the last chord
-            fillet_extension = last_chord * 0.5  # Extend by half the chord length
+            fillet_extension = last_chord * TIP_FILLET_EXTENSION_FACTOR
             
             for k in range(1, n_tip_fillet_sections + 1):
                 # Progressive reduction factor (decreases from 1 to near 0)
-                alpha = k / float(n_tip_fillet_sections + 1)
+                alpha = k / (n_tip_fillet_sections + 1)
                 
                 # Position extends beyond the last section
                 z_pos = last_z_pos + alpha * fillet_extension
                 
                 # Progressive reduction in chord and thickness
                 # Use a power curve for smooth reduction
-                reduction_factor = (1.0 - alpha) ** 1.5
+                reduction_factor = (1.0 - alpha) ** TIP_FILLET_REDUCTION_EXPONENT
                 
                 # Scale down the airfoil thickness
                 fillet_t = last_t * reduction_factor
