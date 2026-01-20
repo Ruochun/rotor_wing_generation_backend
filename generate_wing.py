@@ -960,8 +960,11 @@ def main():
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
     
     # Export counterclockwise version to STL
+    # Scale coordinates from meters to millimeters (×1000) for output
     print(f"Exporting counterclockwise version to {args.output}...")
-    wing_mesh.export(args.output)
+    wing_mesh_mm = wing_mesh.copy()
+    wing_mesh_mm.vertices *= 1000.0  # Convert from m to mm
+    wing_mesh_mm.export(args.output)
     
     # Generate clockwise version
     print("Generating clockwise version...")
@@ -972,8 +975,11 @@ def main():
     base_name, ext = os.path.splitext(args.output)
     cw_output = f"{base_name}_cw{ext}"
     
+    # Scale coordinates from meters to millimeters (×1000) for output
     print(f"Exporting clockwise version to {cw_output}...")
-    cw_mesh.export(cw_output)
+    cw_mesh_mm = cw_mesh.copy()
+    cw_mesh_mm.vertices *= 1000.0  # Convert from m to mm
+    cw_mesh_mm.export(cw_output)
     
     print("Done!")
 

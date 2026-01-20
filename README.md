@@ -56,6 +56,8 @@ python generate_params.py input.csv --overall-length 0.025 --n-wings 3 --average
 
 Generates 3D wing geometry from CSV parameters and exports as STL file. **Automatically creates both counterclockwise (CCW) and clockwise (CW) versions** of the wing design.
 
+**Note:** All internal calculations use SI units (meters), but the exported STL files are automatically scaled to millimeters (×1000) for compatibility with standard 3D printing and CAD software.
+
 **Usage:**
 
 ```bash
@@ -114,6 +116,8 @@ The script generates **two STL files**:
 - `<filename>_cw.stl` - Clockwise rotation version (mirrored across XY plane with corrected normals)
 
 Both files maintain proper outward-pointing normals for correct 3D printing and visualization.
+
+**Units:** All STL files are exported in millimeters. Internal calculations use SI units (meters), but coordinates are automatically scaled by 1000 during export for compatibility with 3D printing software.
 
 **Examples:**
 
