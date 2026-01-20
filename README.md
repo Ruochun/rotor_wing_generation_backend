@@ -68,10 +68,13 @@ python generate_wing.py input.csv --output wing.stl [options]
 - `--output`: Output STL file path (default: wing_output.stl)
 - `--blend-sections`: Number of blend sections between defined stations (default: 6)
 - `--profile-points`: Number of points per airfoil side (default: 50)
-- `--envelope-offset`: Envelope offset as fraction of chord (default: 0.02). 
+- `--envelope-offset`: Envelope offset as fraction of chord (default: 0.03). 
   Adds a small, thin envelope around all NACA sections by offsetting in the outward 
   normal direction. This removes sharp edges (especially at the trailing edge and 
   wing tip), making the wing more 3D printing friendly.
+- `--tip-fillet-sections`: Number of additional sections at the wing tip for filleting (default: 3).
+  These sections progressively decrease in size toward the tip, creating a smooth rounded 
+  tip edge. Higher values create smoother fillets. Set to 0 to disable tip filleting.
 
 **3D Printing Enhancement:**
 
@@ -80,12 +83,22 @@ The `--envelope-offset` parameter adds a thin envelope around all airfoil sectio
 - Creates a rounded cap at the trailing edge by interpolating multiple offset directions
 - Rounds the wing tip for better printability
 - Eliminates thin features that might break during printing
-- Default value of 0.02 (2% of chord) provides a good balance
+- Default value of 0.03 (3% of chord) provides a good balance
 
 The trailing edge rounding uses angular interpolation to create a smooth transition between 
 upper and lower surface offsets, eliminating the sharp corners that would otherwise occur.
 
 To disable the envelope (not recommended for 3D printing), set `--envelope-offset 0.0`.
+
+**Tip Filleting:**
+
+The `--tip-fillet-sections` parameter adds progressively smaller NACA sections at the wing tip:
+- Creates a smooth rounded tip edge instead of a flat cap
+- Each fillet section decreases in chord and thickness using a power curve
+- The fillet extends beyond the final defined section by approximately 0.5× the tip chord
+- Default value of 3 sections provides good balance between smoothness and geometry complexity
+- Higher values (e.g., 5) create smoother, more gradual fillets
+- Set to 0 to disable tip filleting and use a flat cap instead
 
 **Output:**
 
@@ -98,12 +111,15 @@ Both files maintain proper outward-pointing normals for correct 3D printing and 
 **Examples:**
 
 ```bash
-# Generate wing from parameters with default envelope offset (0.02)
+# Generate wing from parameters with default settings (includes tip fillet)
 # This creates two files: wing.stl (CCW) and wing_cw.stl (CW)
 python generate_wing.py sample_params.csv --output wing.stl
 
-# Generate wing with larger envelope for more robust 3D printing
-python generate_wing.py sample_params.csv --output wing.stl --envelope-offset 0.03
+# Generate wing with larger envelope and more tip fillet sections for smoother edges
+python generate_wing.py sample_params.csv --output wing.stl --envelope-offset 0.04 --tip-fillet-sections 5
+
+# Generate wing without tip fillet (uses flat cap at tip)
+python generate_wing.py sample_params.csv --output wing.stl --tip-fillet-sections 0
 
 # Generate wing without envelope (sharp edges, not recommended for 3D printing)
 python generate_wing.py sample_params.csv --output wing.stl --envelope-offset 0.0
@@ -174,8 +190,12 @@ python generate_params.py custom_params.csv \
     --n-wings 4
 
 # Step 2: Generate 3D wing geometry (creates both CCW and CW versions)
+# Default includes tip filleting with 3 sections for smooth rounded tips
 python generate_wing.py custom_params.csv --output custom_wing.stl
 # This creates: custom_wing.stl (CCW) and custom_wing_cw.stl (CW)
+
+# Optional: Customize tip filleting for smoother edges
+python generate_wing.py custom_params.csv --output custom_wing.stl --tip-fillet-sections 5
 
 # Step 3: Analyze wing performance
 python analysis.py custom_params.csv custom_analysis.csv --rpm 3000
