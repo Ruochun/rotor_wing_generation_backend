@@ -26,8 +26,8 @@ Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.0015
 
 # Tip fillet constants
 TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value) × original (default: 92% of original)
-TIP_FILLET_EXTENSION_FACTOR = 0.03  # Fillet extends beyond last section by this factor × tip_chord (default: 3% of chord)
-TIP_FILLET_REDUCTION_EXPONENT = 1.5  # Power curve exponent for smooth tapering (higher = steeper taper)
+TIP_FILLET_EXTENSION_FACTOR = 0.045  # Fillet extends beyond last section by this factor × tip_chord (default: 4.5% of tip chord)
+TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (higher = steeper taper)
 
 class WingGenerator:
     """
