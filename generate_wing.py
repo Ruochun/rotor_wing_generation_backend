@@ -166,54 +166,118 @@ class WingGenerator:
         # For proper connectivity, we need to split the profile at the trailing edge
         # and insert the interpolated points to create a smooth rounded cap
         
-        # Get the normals of points adjacent to the trailing edge
-        prev_te_idx = (te_idx - 1) % n_points
-        next_te_idx = (te_idx + 1) % n_points
+        # NACA profiles have two TE points: upper surface TE (usually index 0) 
+        # and lower surface TE (usually index n_points-1), both at x≈1.0
+        # We need to find both TE points for proper interpolation
         
-        normal_before = offset_normals[prev_te_idx]
-        normal_after = offset_normals[next_te_idx]
+        # Find the TWO actual TE points (not just all points near x=1.0)
+        # For NACA profiles: index 0 is always upper TE, index n-1 is always lower TE
+        # But let's detect them robustly by finding the two points closest to x=1.0
+        
+        # Find the closest point to x=1.0
+        te_distances = np.abs(x_coords - 1.0)
+        closest_te_idx = np.argmin(te_distances)
+        
+        # Find the second closest point (should be on the other surface)
+        # Set the closest one to a large value temporarily
+        te_distances_copy = te_distances.copy()
+        te_distances_copy[closest_te_idx] = np.inf
+        second_te_idx = np.argmin(te_distances_copy)
+        
+        # Determine which is upper and which is lower surface
+        # The profile goes: upper TE (idx 0) → LE → lower TE (idx n-1)
+        # So the point with smaller index is upper TE
+        if closest_te_idx < second_te_idx:
+            upper_surface_te_idx = closest_te_idx
+            lower_surface_te_idx = second_te_idx
+        else:
+            upper_surface_te_idx = second_te_idx
+            lower_surface_te_idx = closest_te_idx
+        
+        # Sanity check: both should be very close to x=1.0
+        if te_distances[upper_surface_te_idx] > 0.05 or te_distances[lower_surface_te_idx] > 0.05:
+            # Something is wrong, fall back to simple offset without TE rounding
+            return np.array(offset_points)
+        
+        # Calculate normals at the TE points
+        # Special handling: at TE, the two points are very close, so using immediate neighbors
+        # gives poor tangent estimates. Instead, use points a few steps away from the TE.
+        te_neighbor_offset = min(3, n_points // 20)  # Use points 3 steps away (or fewer for small profiles)
+        
+        # For upper TE: look at the point a few steps forward (toward LE)
+        upper_neighbor_idx = (upper_surface_te_idx + te_neighbor_offset) % n_points
+        # Tangent for upper surface at TE: from TE toward LE
+        tangent_upper = profile[upper_neighbor_idx] - profile[upper_surface_te_idx]
+        tangent_upper = tangent_upper / (np.linalg.norm(tangent_upper) + 1e-10)
+        # Normal is perpendicular, rotated 90° CCW
+        normal_upper = np.array([-tangent_upper[1], tangent_upper[0]])
+        
+        # For lower TE: look at the point a few steps backward (toward LE)
+        lower_neighbor_idx = (lower_surface_te_idx - te_neighbor_offset) % n_points
+        # Tangent for lower surface at TE: from TE toward LE
+        tangent_lower = profile[lower_neighbor_idx] - profile[lower_surface_te_idx]
+        tangent_lower = tangent_lower / (np.linalg.norm(tangent_lower) + 1e-10)
+        # Normal is perpendicular, rotated 90° CCW
+        normal_lower = np.array([-tangent_lower[1], tangent_lower[0]])
+        
+        # Ensure both normals point outward (away from centroid)
+        te_center = (profile[upper_surface_te_idx] + profile[lower_surface_te_idx]) / 2.0
+        centroid = profile.mean(axis=0)
+        to_centroid_from_te = centroid - te_center
+        
+        # Check and flip if needed
+        if np.dot(normal_upper, to_centroid_from_te) > 0:
+            normal_upper = -normal_upper
+        if np.dot(normal_lower, to_centroid_from_te) > 0:
+            normal_lower = -normal_lower
+        
+        # Use the midpoint between the two TE points as the reference point for interpolation
+        te_point = te_center
         
         # Calculate angles of the normals
-        angle_before = np.arctan2(normal_before[1], normal_before[0])
-        angle_after = np.arctan2(normal_after[1], normal_after[0])
+        angle_lower = np.arctan2(normal_lower[1], normal_lower[0])
+        angle_upper = np.arctan2(normal_upper[1], normal_upper[0])
         
         # Ensure we interpolate the shorter arc
         # If the angular difference is greater than π, adjust
-        angle_diff = angle_after - angle_before
+        angle_diff = angle_upper - angle_lower
         if angle_diff > np.pi:
-            angle_after -= 2 * np.pi
+            angle_upper -= 2 * np.pi
         elif angle_diff < -np.pi:
-            angle_after += 2 * np.pi
+            angle_upper += 2 * np.pi
         
-        # Build the result with proper ordering:
-        # - Start from point after TE (te_idx + 1)
-        # - Go around to the point before TE (te_idx - 1)
-        # - Add the point before TE
-        # - Add interpolated TE points
-        # - Add the TE point
-        # This maintains smooth connectivity
+        # Build the result with proper ordering for NACA profiles:
+        # NACA profiles are: upper_TE (idx 0) → LE → lower_TE (idx n-1)
+        # After offset, we want to rebuild the loop going around the profile
+        # Start from upper_TE, go to LE, then to lower_TE, add interpolated cap, close loop
         result = []
         
-        # Add points from after TE to before TE (wrapping around)
+        # Add ALL points from upper TE to (but not including) lower TE
+        start_idx = upper_surface_te_idx
+        end_idx = lower_surface_te_idx
+        
         for i in range(n_points):
-            idx = (te_idx + 1 + i) % n_points
-            if idx == te_idx:
-                # We're back at the TE, stop here
+            idx = (start_idx + i) % n_points
+            if idx == end_idx:
+                # We've reached the lower TE, stop here
                 break
             result.append(offset_points[idx])
         
         # Now add the interpolated TE cap points
+        # These interpolate from lower surface normal to upper surface normal,
+        # effectively closing the gap between the end of our point list (near lower TE)
+        # and the beginning (upper TE)
         for j in range(n_te_points):
             alpha = (j + 1) / (n_te_points + 1)
-            # Interpolate angle from before to after
-            interp_angle = (1 - alpha) * angle_before + alpha * angle_after
+            # Interpolate angle from lower surface to upper surface around the TE
+            interp_angle = (1 - alpha) * angle_lower + alpha * angle_upper
             # Create normal at this angle
             interp_normal = np.array([np.cos(interp_angle), np.sin(interp_angle)])
             # Add offset point
             result.append(te_point + interp_normal * offset_distance)
         
-        # Finally add the TE point itself
-        result.append(offset_points[te_idx])
+        # The loop is now closed: upper_TE → LE → lower_TE → [TE cap] → (back to upper_TE)
+        # No need to add the lower TE point again - the loop naturally closes
         
         return np.array(result)
     
