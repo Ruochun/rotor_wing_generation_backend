@@ -61,7 +61,7 @@ Generates 3D wing geometry from CSV parameters and exports as STL file. **Automa
 **Usage:**
 
 ```bash
-python generate_wing.py input.csv --output wing.stl [options]
+python generate_wing.py input.csv --output rotors.stl [options]
 ```
 
 **Options:**
@@ -123,20 +123,20 @@ Both files maintain proper outward-pointing normals for correct 3D printing and 
 
 ```bash
 # Generate wing from parameters with default settings (includes tip fillet)
-# This creates two files: wing.stl (CCW) and wing_cw.stl (CW)
-python generate_wing.py sample_params.csv --output wing.stl
+# This creates two files: rotors.stl (CCW) and wing_cw.stl (CW)
+python generate_wing.py sample_params.csv --output rotors.stl
 
 # Generate wing with larger envelope offset (thicker envelope)
-python generate_wing.py sample_params.csv --output wing.stl --envelope-offset 0.05
+python generate_wing.py sample_params.csv --output rotors.stl --envelope-offset 0.05
 
 # Generate wing with more tip fillet sections for extra smooth tip
-python generate_wing.py sample_params.csv --output wing.stl --tip-fillet-sections 8
+python generate_wing.py sample_params.csv --output rotors.stl --tip-fillet-sections 8
 
 # Generate wing without tip fillet (uses flat cap at tip)
-python generate_wing.py sample_params.csv --output wing.stl --tip-fillet-sections 0
+python generate_wing.py sample_params.csv --output rotors.stl --tip-fillet-sections 0
 
 # Generate wing without envelope (sharp edges, not recommended for 3D printing)
-python generate_wing.py sample_params.csv --output wing.stl --envelope-offset 0.0
+python generate_wing.py sample_params.csv --output rotors.stl --envelope-offset 0.0
 ```
 
 ### `analysis.py`
@@ -205,11 +205,11 @@ python generate_params.py custom_params.csv \
 
 # Step 2: Generate 3D wing geometry (creates both CCW and CW versions)
 # Default includes tip filleting with 5 sections for smooth rounded tips
-python generate_wing.py custom_params.csv --output custom_wing.stl
-# This creates: custom_wing.stl (CCW) and custom_wing_cw.stl (CW)
+python generate_wing.py custom_params.csv --output custom_rotors.stl
+# This creates: custom_rotors.stl (CCW) and custom_wing_cw.stl (CW)
 
 # Optional: Customize envelope offset and number of tip fillet sections
-python generate_wing.py custom_params.csv --output custom_wing.stl --envelope-offset 0.05 --tip-fillet-sections 8
+python generate_wing.py custom_params.csv --output custom_rotors.stl --envelope-offset 0.05 --tip-fillet-sections 8
 
 # Step 3: Analyze wing performance
 python analysis.py custom_params.csv custom_analysis.csv --rpm 3000
@@ -267,14 +267,14 @@ If you received pre-built executables, you can use them directly without install
 **Windows:**
 ```cmd
 generate_params.exe input.csv --overall-length 0.03
-generate_wing.exe input.csv --output wing.stl
+generate_wing.exe input.csv --output rotors.stl
 analysis.exe input.csv results.csv --rpm 4000
 ```
 
 **Linux:**
 ```bash
 ./generate_params input.csv --overall-length 0.03
-./generate_wing input.csv --output wing.stl
+./generate_wing input.csv --output rotors.stl
 ./analysis input.csv results.csv --rpm 4000
 ```
 
