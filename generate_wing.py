@@ -502,7 +502,7 @@ class WingGenerator:
                            a smooth rounded tip edge. The size reduction is controlled by the
                            TIP_FILLET_SIZE_REDUCTION constant (default: 0.08, creating 92% final size).
                            The extension distance is controlled by TIP_FILLET_EXTENSION_FACTOR constant
-                           (default: 0.03, extending 3% of tip chord).
+                           (default: 0.045, extending 4.5% of tip chord).
             
         Returns:
             Trimesh object of the wing
@@ -792,7 +792,7 @@ class WingGenerator:
                            These sections progressively decrease in size toward the tip to create
                            a smooth rounded tip edge. The size reduction is controlled by the
                            TIP_FILLET_SIZE_REDUCTION constant (default: 0.08). The extension distance
-                           is controlled by TIP_FILLET_EXTENSION_FACTOR constant (default: 0.03).
+                           is controlled by TIP_FILLET_EXTENSION_FACTOR constant (default: 0.045).
             
         Returns:
             Combined mesh of all wings merged with the hub
@@ -931,7 +931,7 @@ def main():
                             'These sections progressively decrease in size toward the tip, '
                             'creating a smooth rounded tip edge. Size reduction controlled by '
                             'TIP_FILLET_SIZE_REDUCTION (default: 0.08, 92%% final size). Extension '
-                            'controlled by TIP_FILLET_EXTENSION_FACTOR (default: 0.03, 3%% of chord).')
+                            'controlled by TIP_FILLET_EXTENSION_FACTOR (default: 0.045, 4.5%% of chord).')
     
     args = parser.parse_args()
     
