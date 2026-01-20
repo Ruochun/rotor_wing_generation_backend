@@ -25,6 +25,7 @@ from scipy import interpolate
 Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.0015
 
 # Tip fillet constants
+TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value) × original (default: 92% of original)
 TIP_FILLET_REDUCTION_EXPONENT = 1.5  # Power curve exponent for smooth tapering (higher = steeper taper)
 
 class WingGenerator:
@@ -495,11 +496,10 @@ class WingGenerator:
             envelope_offset: Offset distance in the outward normal direction (as fraction of chord).
                            This adds a small envelope around the airfoil to remove sharp edges.
                            Typical values: 0.01 to 0.05 for 3D printing friendly geometry.
-                           Also controls the tip fillet reduction: the final fillet section will be
-                           (1 - envelope_offset) times the size of the original tip section.
             n_tip_fillet_sections: Number of additional sections at tip for filleting (default: 5).
                            These sections progressively decrease in size toward the tip to create
-                           a smooth rounded tip edge.
+                           a smooth rounded tip edge. The size reduction is controlled by the
+                           TIP_FILLET_SIZE_REDUCTION constant (default: 0.08, creating 92% final size).
             
         Returns:
             Trimesh object of the wing
@@ -598,14 +598,14 @@ class WingGenerator:
             last_twist = twist_angles[-1]
             last_z_pos = section_positions[-1]
             
-            # Calculate the final size reduction based on envelope_offset
-            # If envelope_offset is 0.03, the final fillet section should be 97% (1 - 0.03) of original
-            final_size_factor = 1.0 - envelope_offset
+            # Calculate the final size reduction based on TIP_FILLET_SIZE_REDUCTION constant
+            # If TIP_FILLET_SIZE_REDUCTION is 0.08, the final fillet section should be 92% (1 - 0.08) of original
+            final_size_factor = 1.0 - TIP_FILLET_SIZE_REDUCTION
             
             # Calculate spacing for fillet sections
-            # The fillet extension is controlled by envelope_offset
-            # Extension = chord × envelope_offset
-            fillet_extension = last_chord * envelope_offset
+            # The fillet extension is controlled by TIP_FILLET_SIZE_REDUCTION
+            # Extension = chord × TIP_FILLET_SIZE_REDUCTION
+            fillet_extension = last_chord * TIP_FILLET_SIZE_REDUCTION
             
             for k in range(1, n_tip_fillet_sections + 1):
                 # Progressive reduction factor using smooth power curve
@@ -785,10 +785,10 @@ class WingGenerator:
             n_profile_points: Number of points per airfoil profile side
             envelope_offset: Offset distance in the outward normal direction (as fraction of chord).
                            This adds a small envelope around the airfoil to remove sharp edges.
-                           Also controls the tip fillet reduction.
             n_tip_fillet_sections: Number of additional sections at tip for filleting (default: 5).
                            These sections progressively decrease in size toward the tip to create
-                           a smooth rounded tip edge.
+                           a smooth rounded tip edge. The size reduction is controlled by the
+                           TIP_FILLET_SIZE_REDUCTION constant (default: 0.08).
             
         Returns:
             Combined mesh of all wings merged with the hub
@@ -926,7 +926,7 @@ def main():
                        help='Number of additional tip fillet sections (default: 5). '
                             'These sections progressively decrease in size toward the tip, '
                             'creating a smooth rounded tip edge. The final size is controlled by '
-                            '--envelope-offset (final size = 1 - envelope-offset).')
+                            'the TIP_FILLET_SIZE_REDUCTION constant (default: 0.08, creating 92%% final size).')
     
     args = parser.parse_args()
     
