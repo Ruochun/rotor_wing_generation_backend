@@ -480,7 +480,8 @@ class WingGenerator:
     def generate_wing_from_params(self, params: Dict, 
                                   n_blend_sections: int = 6,
                                   n_profile_points: int = 50,
-                                  envelope_offset: float = 0.0) -> trimesh.Trimesh:
+                                  envelope_offset: float = 0.0,
+                                  n_tip_fillet_sections: int = 3) -> trimesh.Trimesh:
         """
         Generate a complete wing mesh from parameter dictionary.
         
@@ -491,6 +492,9 @@ class WingGenerator:
             envelope_offset: Offset distance in the outward normal direction (as fraction of chord).
                            This adds a small envelope around the airfoil to remove sharp edges.
                            Typical values: 0.01 to 0.05 for 3D printing friendly geometry.
+            n_tip_fillet_sections: Number of additional sections at tip for filleting (default: 3).
+                           These sections progressively decrease in size toward the tip to create
+                           a smooth rounded tip edge.
             
         Returns:
             Trimesh object of the wing
@@ -580,6 +584,52 @@ class WingGenerator:
                     )
                     all_sections.append(section)
                     section_idx += 1
+        
+        # Add tip fillet sections (progressively smaller sections toward the tip)
+        if n_tip_fillet_sections > 0:
+            # Get the last section parameters
+            last_m, last_p, last_t = self.parse_naca4(naca_codes[-1])
+            last_chord = chord_lengths[-1]
+            last_twist = twist_angles[-1]
+            last_z_pos = section_positions[-1]
+            
+            # Calculate spacing for fillet sections
+            # Extend beyond the last section by a distance proportional to the last chord
+            fillet_extension = last_chord * 0.5  # Extend by half the chord length
+            
+            for k in range(1, n_tip_fillet_sections + 1):
+                # Progressive reduction factor (decreases from 1 to near 0)
+                alpha = k / float(n_tip_fillet_sections + 1)
+                
+                # Position extends beyond the last section
+                z_pos = last_z_pos + alpha * fillet_extension
+                
+                # Progressive reduction in chord and thickness
+                # Use a power curve for smooth reduction
+                reduction_factor = (1.0 - alpha) ** 1.5
+                
+                # Scale down the airfoil thickness
+                fillet_t = last_t * reduction_factor
+                # Maintain camber characteristics
+                fillet_m = last_m * reduction_factor
+                fillet_p = last_p
+                
+                # Generate the fillet section profile
+                profile = self.generate_naca4_profile(fillet_m, fillet_p, fillet_t, n_profile_points)
+                
+                # Apply envelope offset
+                profile = self.offset_profile(profile, envelope_offset)
+                
+                # Scale down the chord
+                fillet_chord = last_chord * reduction_factor
+                
+                # Keep the same twist angle
+                fillet_twist = last_twist
+                
+                section = self.transform_profile_to_section(
+                    profile, z_pos, fillet_chord, fillet_twist, self.wing_start_location
+                )
+                all_sections.append(section)
         
         # Create lofted surface
         wing_mesh = self.create_lofted_surface(all_sections)
@@ -709,7 +759,8 @@ class WingGenerator:
     def generate_complete_design(self, params: Dict,
                                 n_blend_sections: int = 6,
                                 n_profile_points: int = 50,
-                                envelope_offset: float = 0.0) -> trimesh.Trimesh:
+                                envelope_offset: float = 0.0,
+                                n_tip_fillet_sections: int = 3) -> trimesh.Trimesh:
         """
         Generate a complete wing design with multiple wings arranged circularly
         and a central hub with a drilled hole.
@@ -720,12 +771,16 @@ class WingGenerator:
             n_profile_points: Number of points per airfoil profile side
             envelope_offset: Offset distance in the outward normal direction (as fraction of chord).
                            This adds a small envelope around the airfoil to remove sharp edges.
+            n_tip_fillet_sections: Number of additional sections at tip for filleting (default: 3).
+                           These sections progressively decrease in size toward the tip to create
+                           a smooth rounded tip edge.
             
         Returns:
             Combined mesh of all wings merged with the hub
         """
         # Generate the base wing
-        base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points, envelope_offset)
+        base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points, 
+                                                   envelope_offset, n_tip_fillet_sections)
         
         # Fix normals on base wing to ensure they point outward
         # self.fix_normals_outward(base_wing)
@@ -852,6 +907,10 @@ def main():
                        help='Envelope offset as fraction of chord (default: 0.03). '
                             'Adds a small, thin envelope around airfoils to remove sharp edges, '
                             'making the wing more 3D printing friendly.')
+    parser.add_argument('--tip-fillet-sections', type=int, default=3,
+                       help='Number of additional tip fillet sections (default: 3). '
+                            'These sections progressively decrease in size toward the tip, '
+                            'creating a smooth rounded tip edge.')
     
     args = parser.parse_args()
     
@@ -864,6 +923,7 @@ def main():
     print(f"  Number of wings: {params['n_wings']}")
     print(f"  Number of sections: {params['n_sections']}")
     print(f"  Envelope offset: {args.envelope_offset:.4f} (as fraction of chord)")
+    print(f"  Tip fillet sections: {args.tip_fillet_sections}")
     
     # Generate wing
     print("Generating wing geometry...")
@@ -872,7 +932,8 @@ def main():
         params, 
         n_blend_sections=args.blend_sections,
         n_profile_points=args.profile_points,
-        envelope_offset=args.envelope_offset
+        envelope_offset=args.envelope_offset,
+        n_tip_fillet_sections=args.tip_fillet_sections
     )
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
