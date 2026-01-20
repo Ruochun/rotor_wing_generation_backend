@@ -163,13 +163,16 @@ class WingGenerator:
                     avg_tangent = np.array([-tangent2[1], tangent2[0]])
             
             # Normal is perpendicular to tangent (rotated 90 degrees)
+            # Initially compute normal by rotating tangent 90° CCW
             normal = np.array([-avg_tangent[1], avg_tangent[0]])
             
-            # Ensure outward direction by checking distance from centroid
-            to_centroid = centroid - curr_point
-            
-            # If normal points toward centroid, flip it
-            if np.dot(normal, to_centroid) > 0:
+            # Determine if normal points outward using the signed area winding
+            # For NACA profiles, the signed area tells us the winding direction:
+            # - positive signed_area = CCW winding → initial normal points INWARD → negate it
+            # - negative signed_area = CW winding → initial normal points OUTWARD → keep it
+            # This is because the avg_tangent averages the incoming and outgoing tangents,
+            # and rotating 90° CCW from this gives the inward normal for CCW curves.
+            if signed_area > 0:
                 normal = -normal
             
             # Store offset point and normal
