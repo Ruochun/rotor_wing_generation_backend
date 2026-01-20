@@ -603,8 +603,8 @@ class WingGenerator:
             final_size_factor = 1.0 - envelope_offset
             
             # Calculate spacing for fillet sections
-            # The fillet extension is proportional to the chord reduction
-            # Extension = chord × (1 - final_size_factor) = chord × envelope_offset
+            # The fillet extension is controlled by envelope_offset
+            # Extension = chord × envelope_offset
             fillet_extension = last_chord * envelope_offset
             
             for k in range(1, n_tip_fillet_sections + 1):
