@@ -96,8 +96,31 @@ class WingGenerator:
         if n_points < 3:
             raise ValueError(f"Profile must have at least 3 points, got {n_points}")
         
-        # Calculate centroid once for all points
-        centroid = profile.mean(axis=0)
+        # Calculate geometric centroid using signed area formula (shoelace formula)
+        # This is more robust for cambered airfoils than simple mean of coordinates
+        # Formula: Cx = (1/6A) * sum((x_i + x_{i+1}) * (x_i * y_{i+1} - x_{i+1} * y_i))
+        #          Cy = (1/6A) * sum((y_i + y_{i+1}) * (x_i * y_{i+1} - x_{i+1} * y_i))
+        # where A is the signed area of the polygon
+        signed_area = 0.0
+        cx = 0.0
+        cy = 0.0
+        
+        for i in range(n_points):
+            j = (i + 1) % n_points
+            cross = profile[i, 0] * profile[j, 1] - profile[j, 0] * profile[i, 1]
+            signed_area += cross
+            cx += (profile[i, 0] + profile[j, 0]) * cross
+            cy += (profile[i, 1] + profile[j, 1]) * cross
+        
+        signed_area *= 0.5
+        
+        # Handle degenerate case (e.g., all points collinear)
+        if abs(signed_area) < 1e-10:
+            centroid = profile.mean(axis=0)
+        else:
+            cx /= (6.0 * signed_area)
+            cy /= (6.0 * signed_area)
+            centroid = np.array([cx, cy])
         
         # First pass: calculate offset for all original points
         offset_points = []
@@ -140,13 +163,16 @@ class WingGenerator:
                     avg_tangent = np.array([-tangent2[1], tangent2[0]])
             
             # Normal is perpendicular to tangent (rotated 90 degrees)
+            # Initially compute normal by rotating tangent 90° CCW
             normal = np.array([-avg_tangent[1], avg_tangent[0]])
             
-            # Ensure outward direction by checking distance from centroid
-            to_centroid = centroid - curr_point
-            
-            # If normal points toward centroid, flip it
-            if np.dot(normal, to_centroid) > 0:
+            # Determine if normal points outward using the signed area winding
+            # For NACA profiles, the signed area tells us the winding direction:
+            # - positive signed_area = CCW winding → initial normal points INWARD → negate it
+            # - negative signed_area = CW winding → initial normal points OUTWARD → keep it
+            # This is because the avg_tangent averages the incoming and outgoing tangents,
+            # and rotating 90° CCW from this gives the inward normal for CCW curves.
+            if signed_area > 0:
                 normal = -normal
             
             # Store offset point and normal
@@ -166,12 +192,24 @@ class WingGenerator:
         # For proper connectivity, we need to split the profile at the trailing edge
         # and insert the interpolated points to create a smooth rounded cap
         
-        # Get the normals of points adjacent to the trailing edge
-        prev_te_idx = (te_idx - 1) % n_points
-        next_te_idx = (te_idx + 1) % n_points
+        # NACA profiles have two TE points: upper (usually idx 0) and lower (usually idx n-1)
+        # Find both TE points to get proper normals for interpolation
+        te_distances = np.abs(x_coords - 1.0)
+        te_indices = np.argsort(te_distances)[:2]  # Get two closest points to x=1.0
         
-        normal_before = offset_normals[prev_te_idx]
-        normal_after = offset_normals[next_te_idx]
+        # Sort by index to determine which is upper and which is lower
+        # Profile goes: upper_TE → LE → lower_TE, so lower index is upper TE
+        upper_te_idx = min(te_indices)
+        lower_te_idx = max(te_indices)
+        
+        # Use the normals at the actual TE points (not adjacent points)
+        # This avoids the issue where adjacent points are on opposite surfaces
+        normal_upper = offset_normals[upper_te_idx]
+        normal_lower = offset_normals[lower_te_idx]
+        
+        # For interpolation, we go from lower surface to upper surface around the TE
+        normal_before = normal_lower
+        normal_after = normal_upper
         
         # Calculate angles of the normals
         angle_before = np.arctan2(normal_before[1], normal_before[0])
