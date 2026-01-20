@@ -29,6 +29,12 @@ TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value)
 TIP_FILLET_EXTENSION_FACTOR = 0.045  # Fillet extends beyond last section by this factor × tip_chord (default: 4.5% of tip chord)
 TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (higher = steeper taper)
 
+# Trailing edge offset constants
+TE_DETECTION_TOLERANCE = 0.05  # Maximum distance from x=1.0 to be considered a TE point
+TE_NEIGHBOR_OFFSET_STEPS = 3  # Number of steps away from TE to use for tangent calculation
+TE_NEIGHBOR_OFFSET_MIN_FRACTION = 0.05  # Minimum fraction of profile points to use (if steps > n_points * fraction)
+NUMERICAL_EPSILON = 1e-10  # Small value for numerical stability in normalization
+
 class WingGenerator:
     """
     Generates 3D wing geometry from parametric design specifications.
@@ -195,20 +201,20 @@ class WingGenerator:
             lower_surface_te_idx = closest_te_idx
         
         # Sanity check: both should be very close to x=1.0
-        if te_distances[upper_surface_te_idx] > 0.05 or te_distances[lower_surface_te_idx] > 0.05:
+        if te_distances[upper_surface_te_idx] > TE_DETECTION_TOLERANCE or te_distances[lower_surface_te_idx] > TE_DETECTION_TOLERANCE:
             # Something is wrong, fall back to simple offset without TE rounding
             return np.array(offset_points)
         
         # Calculate normals at the TE points
         # Special handling: at TE, the two points are very close, so using immediate neighbors
         # gives poor tangent estimates. Instead, use points a few steps away from the TE.
-        te_neighbor_offset = min(3, n_points // 20)  # Use points 3 steps away (or fewer for small profiles)
+        te_neighbor_offset = min(TE_NEIGHBOR_OFFSET_STEPS, int(n_points * TE_NEIGHBOR_OFFSET_MIN_FRACTION))
         
         # For upper TE: look at the point a few steps forward (toward LE)
         upper_neighbor_idx = (upper_surface_te_idx + te_neighbor_offset) % n_points
         # Tangent for upper surface at TE: from TE toward LE
         tangent_upper = profile[upper_neighbor_idx] - profile[upper_surface_te_idx]
-        tangent_upper = tangent_upper / (np.linalg.norm(tangent_upper) + 1e-10)
+        tangent_upper = tangent_upper / (np.linalg.norm(tangent_upper) + NUMERICAL_EPSILON)
         # Normal is perpendicular, rotated 90° CCW
         normal_upper = np.array([-tangent_upper[1], tangent_upper[0]])
         
@@ -216,7 +222,7 @@ class WingGenerator:
         lower_neighbor_idx = (lower_surface_te_idx - te_neighbor_offset) % n_points
         # Tangent for lower surface at TE: from TE toward LE
         tangent_lower = profile[lower_neighbor_idx] - profile[lower_surface_te_idx]
-        tangent_lower = tangent_lower / (np.linalg.norm(tangent_lower) + 1e-10)
+        tangent_lower = tangent_lower / (np.linalg.norm(tangent_lower) + NUMERICAL_EPSILON)
         # Normal is perpendicular, rotated 90° CCW
         normal_lower = np.array([-tangent_lower[1], tangent_lower[0]])
         
