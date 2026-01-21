@@ -363,6 +363,37 @@ class WingGenerator:
         
         return coords
     
+    def resample_profile(self, profile: np.ndarray, n_points: int) -> np.ndarray:
+        """
+        Resample a 2D or 3D closed profile to have a specific number of points.
+        
+        Args:
+            profile: Array of shape (N, 2) or (N, 3) with profile coordinates
+            n_points: Target number of points
+            
+        Returns:
+            Array of shape (n_points, 2) or (n_points, 3) with resampled coordinates
+        """
+        if len(profile) == n_points:
+            return profile
+        
+        # Calculate cumulative distance along the profile
+        is_3d = profile.shape[1] == 3
+        diffs = np.diff(profile, axis=0)
+        distances = np.sqrt((diffs ** 2).sum(axis=1))
+        cumulative_dist = np.concatenate([[0], np.cumsum(distances)])
+        
+        # Create uniform sampling points along the cumulative distance
+        total_length = cumulative_dist[-1]
+        target_distances = np.linspace(0, total_length, n_points)
+        
+        # Interpolate coordinates at the target distances
+        resampled = []
+        for dim in range(profile.shape[1]):
+            resampled.append(np.interp(target_distances, cumulative_dist, profile[:, dim]))
+        
+        return np.column_stack(resampled)
+    
     def blend_naca_codes(self, code_a: str, code_b: str, alpha: float) -> Tuple[float, float, float]:
         """
         Blend two NACA codes for smooth transition.
@@ -383,6 +414,213 @@ class WingGenerator:
         t = (1 - alpha) * t_a + alpha * t_b
         
         return m, p, t
+    
+    def create_rectangular_profile(self, width: float, height: float, 
+                                   z_pos: float, n_points: int = 50) -> np.ndarray:
+        """
+        Create a rectangular profile centered on the origin at a given Z position.
+        
+        Args:
+            width: Width of the rectangle (in X direction)
+            height: Height of the rectangle (in Y direction)
+            z_pos: Spanwise position (along Z axis)
+            n_points: Number of points to use for the rectangle perimeter
+            
+        Returns:
+            Array of shape (n_points, 3) with 3D coordinates forming a closed rectangle
+        """
+        # Distribute points around the rectangle perimeter
+        # The points are distributed proportionally to edge lengths
+        half_w = width / 2.0
+        half_h = height / 2.0
+        
+        # Calculate perimeter
+        perimeter = 2 * (width + height)
+        
+        # Points per edge (proportional to edge length)
+        n_width = max(2, int(n_points * width / perimeter))
+        n_height = max(2, int(n_points * height / perimeter))
+        
+        # Make sure we have at least 4 points (one per corner)
+        n_width = max(2, n_width)
+        n_height = max(2, n_height)
+        
+        points = []
+        
+        # Top edge (left to right)
+        for i in range(n_width):
+            t = i / (n_width - 1) if n_width > 1 else 0.5
+            x = -half_w + t * width
+            y = half_h
+            points.append([x, y, z_pos])
+        
+        # Right edge (top to bottom), skip first point to avoid duplicate
+        for i in range(1, n_height):
+            t = i / (n_height - 1) if n_height > 1 else 0.5
+            x = half_w
+            y = half_h - t * height
+            points.append([x, y, z_pos])
+        
+        # Bottom edge (right to left), skip first point to avoid duplicate
+        for i in range(1, n_width):
+            t = i / (n_width - 1) if n_width > 1 else 0.5
+            x = half_w - t * width
+            y = -half_h
+            points.append([x, y, z_pos])
+        
+        # Left edge (bottom to top), skip first and last to avoid duplicates
+        for i in range(1, n_height - 1):
+            t = i / (n_height - 1) if n_height > 1 else 0.5
+            x = -half_w
+            y = -half_h + t * height
+            points.append([x, y, z_pos])
+        
+        # Add starting location offset
+        points = np.array(points)
+        points += self.wing_start_location
+        
+        return points
+    
+    def create_hub_fillet(self, params: Dict, n_profile_points: int = 50,
+                         hub_fillet: float = 0.0, n_loft_sections: int = 10,
+                         envelope_offset: float = 0.0) -> Optional[trimesh.Trimesh]:
+        """
+        Create a lofted fillet solid that transitions from a rectangular profile at the hub
+        to a NACA section along the wing, creating a smooth fillet at the wing root.
+        
+        Args:
+            params: Dictionary of wing parameters
+            n_profile_points: Number of points per profile
+            hub_fillet: Fillet size parameter [0.0, 1.0]
+                       0.0 = no fillet (rectangular height matches first NACA section height)
+                       1.0 = maximum fillet (rectangular height matches hub height)
+            n_loft_sections: Number of intermediate sections for the loft
+            envelope_offset: Envelope offset to apply to NACA profiles
+            
+        Returns:
+            Trimesh object representing the fillet solid, or None if hub_fillet is 0.0
+        """
+        if hub_fillet <= 0.0:
+            return None
+        
+        # Clamp hub_fillet to [0, 1]
+        hub_fillet = max(0.0, min(1.0, hub_fillet))
+        
+        # Get the root chord (first section) and second section parameters
+        root_chord = params['chord_0']
+        naca_code_0 = params['naca_0']
+        naca_code_1 = params['naca_1']
+        
+        # Calculate z positions for first and second sections
+        overall_length = params['overall_length']
+        n_sections = params['n_sections']
+        actual_wing_length = overall_length - Z_OFFSET_OF_BLADES_FOR_BOOLEAN
+        section_positions = np.linspace(0, actual_wing_length, n_sections)
+        
+        z_root = section_positions[0]
+        z_second = section_positions[1] if n_sections > 1 else section_positions[0]
+        
+        # Calculate the Z position of the NACA end (interpolated based on hub_fillet)
+        # At hub_fillet=0.0, use first NACA section (z_root)
+        # At hub_fillet=1.0, use second NACA section (z_second)
+        z_naca_end = z_root + hub_fillet * (z_second - z_root)
+        
+        # Calculate the height of the rectangular end
+        # First, get the height of the first NACA section (max thickness)
+        m_0, p_0, t_0 = self.parse_naca4(naca_code_0)
+        naca_height = root_chord * t_0
+        
+        # Interpolate between NACA height and hub height based on hub_fillet
+        # At hub_fillet=0.0, rectangular height = NACA height (no fillet effect)
+        # At hub_fillet=1.0, rectangular height = hub height (maximum fillet)
+        rect_height = naca_height + hub_fillet * (self.HUB_HEIGHT - naca_height)
+        rect_width = root_chord
+        
+        # Generate a reference NACA profile to get a base count for target points
+        # Use a fixed target to avoid variability
+        n_points_target = 2 * n_profile_points + 8  # Approximate count after offset
+        
+        # Create the loft sections with 1/x profile distribution
+        loft_sections = []
+        
+        # Create sections from rectangular end (at z_root) to NACA end (at z_naca_end)
+        for i in range(n_loft_sections + 1):
+            # Use 1/x profile for distribution
+            # Map i from [0, n_loft_sections] to alpha from [0, 1]
+            # But apply 1/x curve to create fillet shape
+            t = i / n_loft_sections
+            
+            # Apply 1/x-like curve: alpha = 1 - 1/(1 + k*t)
+            # This creates a curve that starts slow and accelerates
+            # k controls the steepness (higher k = more like 1/x)
+            k = 5.0
+            alpha = 1.0 - 1.0 / (1.0 + k * t)
+            
+            # Calculate z position for this section
+            z_pos = z_root + alpha * (z_naca_end - z_root)
+            
+            if alpha < 1e-6:
+                # First section: rectangular profile
+                section = self.create_rectangular_profile(rect_width, rect_height, z_pos, n_points_target)
+                # Resample to ensure exact point count
+                section = self.resample_profile(section, n_points_target)
+            elif alpha > 1.0 - 1e-6:
+                # Last section: NACA profile at the target section
+                # Interpolate NACA parameters based on hub_fillet
+                if hub_fillet > 0.999:
+                    # Use second NACA section
+                    m, p, t = self.parse_naca4(naca_code_1)
+                    chord = params['chord_1']
+                    twist = params['twist_1']
+                else:
+                    # Blend between first and second NACA sections
+                    m, p, t = self.blend_naca_codes(naca_code_0, naca_code_1, hub_fillet)
+                    chord = root_chord + hub_fillet * (params['chord_1'] - root_chord)
+                    twist = params['twist_0'] + hub_fillet * (params['twist_1'] - params['twist_0'])
+                
+                profile = self.generate_naca4_profile(m, p, t, n_profile_points)
+                profile = self.offset_profile(profile, envelope_offset)
+                section = self.transform_profile_to_section(profile, z_pos, chord, twist, self.wing_start_location)
+                # Resample to ensure consistent point count
+                section = self.resample_profile(section, n_points_target)
+            else:
+                # Intermediate section: blend between rectangular and NACA
+                # For simplicity, we use a morphed NACA profile that gradually transitions
+                # from the rectangular shape to the target NACA shape
+                
+                # Blend NACA parameters
+                if hub_fillet > 0.999:
+                    m, p, t = self.parse_naca4(naca_code_1)
+                    target_chord = params['chord_1']
+                    target_twist = params['twist_1']
+                else:
+                    m, p, t = self.blend_naca_codes(naca_code_0, naca_code_1, hub_fillet)
+                    target_chord = root_chord + hub_fillet * (params['chord_1'] - root_chord)
+                    target_twist = params['twist_0'] + hub_fillet * (params['twist_1'] - params['twist_0'])
+                
+                # Interpolate chord and twist
+                chord = rect_width + alpha * (target_chord - rect_width)
+                twist = alpha * target_twist
+                
+                # Generate NACA profile and transform
+                profile = self.generate_naca4_profile(m, p, t, n_profile_points)
+                profile = self.offset_profile(profile, envelope_offset)
+                section = self.transform_profile_to_section(profile, z_pos, chord, twist, self.wing_start_location)
+                # Resample to ensure consistent point count
+                section = self.resample_profile(section, n_points_target)
+            
+            loft_sections.append(section)
+        
+        # Create the lofted surface
+        if len(loft_sections) < 2:
+            return None
+        
+        fillet_mesh = self.create_lofted_surface(loft_sections)
+        
+        # Cap the ends
+        fillet_mesh = self.cap_ends(fillet_mesh, loft_sections)
+        
+        return fillet_mesh
     
     def create_smooth_interpolator(self, control_values: List[float], control_positions: List[float], 
                                    kind: str = 'cubic') -> interpolate.interp1d:
@@ -524,7 +762,8 @@ class WingGenerator:
                                   n_blend_sections: int = 6,
                                   n_profile_points: int = 50,
                                   envelope_offset: float = 0.0,
-                                  n_tip_fillet_sections: int = 5) -> trimesh.Trimesh:
+                                  n_tip_fillet_sections: int = 5,
+                                  hub_fillet: float = 0.0) -> trimesh.Trimesh:
         """
         Generate a complete wing mesh from parameter dictionary.
         
@@ -541,6 +780,9 @@ class WingGenerator:
                            TIP_FILLET_SIZE_REDUCTION constant (default: 0.08, creating 92% final size).
                            The extension distance is controlled by TIP_FILLET_EXTENSION_FACTOR constant
                            (default: 0.045, extending 4.5% of tip chord).
+            hub_fillet: Fillet size parameter [0.0, 1.0] controlling the hub-wing fillet.
+                       0.0 = no fillet (current behavior)
+                       1.0 = maximum fillet from hub to second NACA section
             
         Returns:
             Trimesh object of the wing
@@ -692,6 +934,21 @@ class WingGenerator:
         # Add end caps
         wing_mesh = self.cap_ends(wing_mesh, all_sections)
         
+        # Create and union the hub fillet if requested
+        if hub_fillet > 0.0:
+            fillet_mesh = self.create_hub_fillet(params, n_profile_points, hub_fillet, 
+                                                 envelope_offset=envelope_offset)
+            if fillet_mesh is not None:
+                try:
+                    # Attempt Boolean union to merge fillet with wing
+                    wing_mesh = trimesh.boolean.union([wing_mesh, fillet_mesh], check_volume=False)
+                    # Fix normals after Boolean operation
+                    self.fix_normals_outward(wing_mesh)
+                except (ValueError, Exception) as e:
+                    # If Boolean union fails, fall back to concatenation
+                    print(f"Warning: Boolean union of fillet failed ({e}), using concatenation instead")
+                    wing_mesh = trimesh.util.concatenate([wing_mesh, fillet_mesh])
+        
         return wing_mesh
     
     def revolve_wing(self, wing_mesh: trimesh.Trimesh, angle_deg: float) -> trimesh.Trimesh:
@@ -815,7 +1072,8 @@ class WingGenerator:
                                 n_blend_sections: int = 6,
                                 n_profile_points: int = 50,
                                 envelope_offset: float = 0.0,
-                                n_tip_fillet_sections: int = 5) -> trimesh.Trimesh:
+                                n_tip_fillet_sections: int = 5,
+                                hub_fillet: float = 0.0) -> trimesh.Trimesh:
         """
         Generate a complete wing design with multiple wings arranged circularly
         and a central hub with a drilled hole.
@@ -831,13 +1089,16 @@ class WingGenerator:
                            a smooth rounded tip edge. The size reduction is controlled by the
                            TIP_FILLET_SIZE_REDUCTION constant (default: 0.08). The extension distance
                            is controlled by TIP_FILLET_EXTENSION_FACTOR constant (default: 0.045).
+            hub_fillet: Fillet size parameter [0.0, 1.0] controlling the hub-wing fillet.
+                       0.0 = no fillet (current behavior)
+                       1.0 = maximum fillet from hub to second NACA section
             
         Returns:
             Combined mesh of all wings merged with the hub
         """
         # Generate the base wing
         base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points, 
-                                                   envelope_offset, n_tip_fillet_sections)
+                                                   envelope_offset, n_tip_fillet_sections, hub_fillet)
         
         # Fix normals on base wing to ensure they point outward
         # self.fix_normals_outward(base_wing)
@@ -970,6 +1231,11 @@ def main():
                             'creating a smooth rounded tip edge. Size reduction controlled by '
                             'TIP_FILLET_SIZE_REDUCTION (default: 0.08, 92%% final size). Extension '
                             'controlled by TIP_FILLET_EXTENSION_FACTOR (default: 0.045, 4.5%% of chord).')
+    parser.add_argument('--hub-fillet', type=float, default=0.0,
+                       help='Hub-wing fillet size [0.0, 1.0] (default: 0.0). '
+                            '0.0 = no fillet (current behavior), '
+                            '1.0 = maximum fillet from hub to second NACA section. '
+                            'Creates a lofted solid to improve structural integrity at the wing root.')
     
     args = parser.parse_args()
     
@@ -983,6 +1249,7 @@ def main():
     print(f"  Number of sections: {params['n_sections']}")
     print(f"  Envelope offset: {args.envelope_offset:.4f} (as fraction of chord)")
     print(f"  Tip fillet sections: {args.tip_fillet_sections}")
+    print(f"  Hub fillet: {args.hub_fillet:.2f}")
     
     # Generate wing
     print("Generating wing geometry...")
@@ -992,7 +1259,8 @@ def main():
         n_blend_sections=args.blend_sections,
         n_profile_points=args.profile_points,
         envelope_offset=args.envelope_offset,
-        n_tip_fillet_sections=args.tip_fillet_sections
+        n_tip_fillet_sections=args.tip_fillet_sections,
+        hub_fillet=args.hub_fillet
     )
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
