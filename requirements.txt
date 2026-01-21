@@ -2,9 +2,13 @@
 numpy>=1.20.0
 scipy>=1.7.0
 trimesh>=3.9.0
+shapely>=1.8.0
 
 # Required for Boolean operations (hub with hole feature)
 manifold3d>=3.0.0
+
+# Required for polygon triangulation in extrude_polygon
+mapbox-earcut>=1.0.0
 
 # Optional: for mesh repair operations
 networkx>=2.5
