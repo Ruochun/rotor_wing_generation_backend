@@ -29,6 +29,11 @@ TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value)
 TIP_FILLET_EXTENSION_FACTOR = 0.045  # Fillet extends beyond last section by this factor × tip_chord (default: 4.5% of tip chord)
 TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (higher = steeper taper)
 
+# Hub fillet constants
+ALPHA_TOLERANCE = 1e-6  # Tolerance for alpha value comparisons in fillet generation
+HUB_FILLET_MAX_THRESHOLD = 0.999  # Threshold for using second NACA section in fillet
+OFFSET_TRAILING_EDGE_POINTS = 8  # Approximate number of extra points added by offset_profile at trailing edge
+
 class WingGenerator:
     """
     Generates 3D wing geometry from parametric design specifications.
@@ -441,10 +446,6 @@ class WingGenerator:
         n_width = max(2, int(n_points * width / perimeter))
         n_height = max(2, int(n_points * height / perimeter))
         
-        # Make sure we have at least 4 points (one per corner)
-        n_width = max(2, n_width)
-        n_height = max(2, n_height)
-        
         points = []
         
         # Top edge (left to right)
@@ -537,8 +538,9 @@ class WingGenerator:
         rect_width = root_chord
         
         # Generate a reference NACA profile to get a base count for target points
-        # Use a fixed target to avoid variability
-        n_points_target = 2 * n_profile_points + 8  # Approximate count after offset
+        # The actual point count after offset varies due to trailing edge points
+        # Use a fixed target based on the expected profile size plus offset additions
+        n_points_target = 2 * n_profile_points + OFFSET_TRAILING_EDGE_POINTS
         
         # Create the loft sections with 1/x profile distribution
         loft_sections = []
@@ -559,15 +561,15 @@ class WingGenerator:
             # Calculate z position for this section
             z_pos = z_root + alpha * (z_naca_end - z_root)
             
-            if alpha < 1e-6:
+            if alpha < ALPHA_TOLERANCE:
                 # First section: rectangular profile
                 section = self.create_rectangular_profile(rect_width, rect_height, z_pos, n_points_target)
                 # Resample to ensure exact point count
                 section = self.resample_profile(section, n_points_target)
-            elif alpha > 1.0 - 1e-6:
+            elif alpha > 1.0 - ALPHA_TOLERANCE:
                 # Last section: NACA profile at the target section
                 # Interpolate NACA parameters based on hub_fillet
-                if hub_fillet > 0.999:
+                if hub_fillet > HUB_FILLET_MAX_THRESHOLD:
                     # Use second NACA section
                     m, p, t = self.parse_naca4(naca_code_1)
                     chord = params['chord_1']
@@ -589,7 +591,7 @@ class WingGenerator:
                 # from the rectangular shape to the target NACA shape
                 
                 # Blend NACA parameters
-                if hub_fillet > 0.999:
+                if hub_fillet > HUB_FILLET_MAX_THRESHOLD:
                     m, p, t = self.parse_naca4(naca_code_1)
                     target_chord = params['chord_1']
                     target_twist = params['twist_1']
