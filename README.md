@@ -20,7 +20,7 @@ python generate_params.py input.csv [options]
 - `--chord-max-thickness`: Maximum chord thickness as percentage (default: 9.0)
 - `--max-camber`: Maximum camber as percentage (default: 6.0)
 - `--max-camber-location`: Location of max camber [0,1], where 0=leading edge (default: 0.4)
-- `--average-chord-length`: Average chord length in meters (default: 0.002). Note: Root section is always fixed at 0.003m for rotor hub union.
+- `--average-chord-length`: Average chord length in meters (default: 0.002). Note: Root section is always fixed at 0.0025m (2.5mm) for rotor hub union.
 - `--chord-length-variance`: Chord length variance [0,1], 0=constant, 1=max variation (default: 0.5). Uses smooth cosine-based transitions.
 - `--max-twist-angle`: Maximum twist angle at root in degrees (default: 40.0)
 - `--n-wings`: Number of wings (default: 3)
@@ -78,6 +78,12 @@ python generate_wing.py input.csv --output rotors.stl [options]
   These sections progressively decrease in size toward the tip, creating a smooth rounded 
   tip edge. Size reduction controlled by `TIP_FILLET_SIZE_REDUCTION` (default: 0.08, 92% final size).
   Extension controlled by `TIP_FILLET_EXTENSION_FACTOR` (default: 0.045, 4.5% of chord). Set to 0 to disable.
+- `--root-fillet-scale`: Scale factor for root section thickness and chord to create a fillet at the
+  hub intersection (default: 7). The root NACA thickness is multiplied by this factor, and the chord
+  is scaled at 10% strength, creating a larger profile that acts as a structural fillet. The scaled
+  chord is automatically clamped to fit within the hub geometry. Typical values: 2.5 to 10.
+- `--smooth`: Apply Taubin smoothing to the mesh (default: False). This helps create smoother fillets
+  and removes sharp edges. Use this flag to enable whole-mesh smoothing.
 
 **3D Printing Enhancement:**
 
@@ -109,6 +115,28 @@ The `--tip-fillet-sections` parameter adds progressively smaller NACA sections a
 - Higher values (e.g., 7-10) create even smoother, more gradual fillets
 - Set to 0 to disable tip filleting and use a flat cap instead
 
+**Root Filleting:**
+
+The `--root-fillet-scale` parameter creates a structural fillet at the wing-hub intersection:
+- Scales the root NACA section thickness by the specified factor (e.g., 7× for default)
+- Also scales the root chord length at 10% strength (e.g., 7× scale → 1.6× chord scaling)
+- The scaled root chord is automatically clamped to fit within the hub geometry (2 × HUB_RADIUS)
+- Uses asymmetric power-curve interpolation (α^0.45) between root and second section, favoring
+  the second section for rapid thickness transition near the hub
+- This creates a smooth fillet that provides structural reinforcement where needed most
+- Typical values: 2.5 to 10 (default: 7)
+- Higher values create larger, stronger fillets but may exceed hub constraints
+- Warnings are issued if clamping occurs
+
+**Mesh Smoothing:**
+
+The `--smooth` flag applies Taubin smoothing to the entire mesh:
+- Helps create smoother fillets and removes sharp edges throughout the mesh
+- Uses Taubin smoothing filter which preserves volume and shape better than Laplacian smoothing
+- Applied to the complete wing assembly (wings + hub) before export
+- Particularly useful when combined with root and tip fillets for optimal structural integrity
+- Default is disabled (False) for faster generation when smoothing is not needed
+
 **Output:**
 
 The script generates **two STL files**:
@@ -123,7 +151,7 @@ Both files maintain proper outward-pointing normals for correct 3D printing and 
 
 ```bash
 # Generate wing from parameters with default settings (includes tip fillet)
-# This creates two files: rotors.stl (CCW) and wing_cw.stl (CW)
+# This creates two files: rotors.stl (CCW) and rotors_cw.stl (CW)
 python generate_wing.py sample_params.csv --output rotors.stl
 
 # Generate wing with larger envelope offset (thicker envelope)
@@ -137,6 +165,15 @@ python generate_wing.py sample_params.csv --output rotors.stl --tip-fillet-secti
 
 # Generate wing without envelope (sharp edges, not recommended for 3D printing)
 python generate_wing.py sample_params.csv --output rotors.stl --envelope-offset 0.0
+
+# Generate wing with custom root fillet for stronger hub attachment
+python generate_wing.py sample_params.csv --output rotors.stl --root-fillet-scale 5.0
+
+# Generate wing with mesh smoothing for smoother fillets
+python generate_wing.py sample_params.csv --output rotors.stl --smooth
+
+# Generate wing with all enhancements for optimal 3D printing
+python generate_wing.py sample_params.csv --output rotors.stl --root-fillet-scale 6.0 --tip-fillet-sections 8 --smooth
 ```
 
 ### `analysis.py`

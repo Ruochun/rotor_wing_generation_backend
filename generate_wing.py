@@ -909,49 +909,22 @@ class WingGenerator:
         # trimesh.repair.fix_inversion(mesh, True)
         return mesh
     
-    def smooth_sharp_edges(self, mesh: trimesh.Trimesh, angle_threshold_deg: float) -> trimesh.Trimesh:
+    def smooth_mesh(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         """
-        Smooth mesh edges that have angles above the specified threshold.
+        Apply smoothing to the entire mesh using Taubin smoothing filter.
         
         Args:
             mesh: The mesh to smooth
-            angle_threshold_deg: Angle threshold in degrees. Edges with angles above this
-                                threshold will be smoothed. Set to 0 to disable smoothing,
-                                or to 180 to smooth all edges.
         
         Returns:
             Smoothed mesh
         """
-        if angle_threshold_deg <= 0:
-            # No smoothing requested
-            return mesh
-        
-        # Get face adjacency angles (in radians)
-        if not hasattr(mesh, 'face_adjacency_angles') or len(mesh.face_adjacency_angles) == 0:
-            # No adjacency information available, return original mesh
-            return mesh
-        
-        # Convert threshold to radians
-        angle_threshold_rad = np.radians(angle_threshold_deg)
-        
-        # Count how many edges exceed the threshold
-        adjacency_angles = mesh.face_adjacency_angles
-        sharp_edges = np.sum(adjacency_angles > angle_threshold_rad)
-        
-        if sharp_edges == 0:
-            # No sharp edges to smooth
-            return mesh
-        
         # Apply Taubin smoothing to the entire mesh
         # Taubin smoothing is a good choice because it preserves volume and shape better
         # than simple Laplacian smoothing
-        # Use more iterations for meshes with more sharp edges
-        iterations = min(5 + sharp_edges // 10, 1000)  # Scale iterations with sharp edge count
-        
         smoothed_mesh = trimesh.smoothing.filter_taubin(
             mesh, 
             lamb=0.5,  # Smoothing factor
-            # nu=0.5,    # Negative smoothing factor (helps preserve volume)
             iterations=1000
         )
         
@@ -1150,11 +1123,9 @@ def main():
                             'hub intersection (default: 7). The root NACA thickness is multiplied '
                             'by this factor, creating a larger profile that acts as a fillet for '
                             'structural integrity. Typical values: 2.5 to 10.')
-    parser.add_argument('--smooth-angle-threshold', type=float, default=60.0,
-                       help='Angle threshold in degrees for mesh smoothing (default: 60). '
-                            'Edges with angles above this threshold will have smoothing applied. '
-                            'This helps create fillets and removes sharp edges. Set to 0 to disable '
-                            'smoothing, or to 180 to smooth all edges.')
+    parser.add_argument('--smooth', action='store_true', default=False,
+                       help='Apply Taubin smoothing to the mesh. This helps create smoother fillets '
+                            'and removes sharp edges. Default is False (no smoothing).')
     
     args = parser.parse_args()
     
@@ -1169,7 +1140,7 @@ def main():
     print(f"  Envelope offset: {args.envelope_offset:.4f} (as fraction of chord)")
     print(f"  Tip fillet sections: {args.tip_fillet_sections}")
     print(f"  Root fillet scale: {args.root_fillet_scale:.2f}")
-    print(f"  Smooth angle threshold: {args.smooth_angle_threshold:.1f}°")
+    print(f"  Mesh smoothing: {'enabled' if args.smooth else 'disabled'}")
     
     # Generate wing
     print("Generating wing geometry...")
@@ -1185,10 +1156,10 @@ def main():
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
     
-    # Apply smoothing to sharp edges if requested
-    if args.smooth_angle_threshold > 0:
-        print(f"Smoothing edges with angles above {args.smooth_angle_threshold:.1f}°...")
-        wing_mesh = generator.smooth_sharp_edges(wing_mesh, args.smooth_angle_threshold)
+    # Apply smoothing if requested
+    if args.smooth:
+        print("Applying mesh smoothing...")
+        wing_mesh = generator.smooth_mesh(wing_mesh)
         print(f"Smoothed mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
     
     # Export counterclockwise version to STL
