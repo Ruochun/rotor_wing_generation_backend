@@ -630,7 +630,8 @@ class WingGenerator:
         naca_codes_modified = [enlarged_root_code] + naca_codes[1:]
         
         # Root chord length is not scaled by root_fillet_scale
-        # It remains at the fixed ROOT_CHORD_LENGTH value (1.7 * HUB_RADIUS)
+        # It remains at the fixed value defined in the CSV parameters (which should be
+        # ROOT_CHORD_LENGTH = 1.7 * HUB_RADIUS from generate_params.py)
         # Only the thickness is scaled for structural reinforcement
         chord_lengths_modified = chord_lengths
         
