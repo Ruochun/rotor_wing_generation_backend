@@ -941,12 +941,18 @@ class WingGenerator:
             if fillet_mesh is not None:
                 try:
                     # Attempt Boolean union to merge fillet with wing
-                    wing_mesh = trimesh.boolean.union([wing_mesh, fillet_mesh], check_volume=False)
-                    # Fix normals after Boolean operation
-                    self.fix_normals_outward(wing_mesh)
-                except (ValueError, Exception) as e:
+                    union_result = trimesh.boolean.union([wing_mesh, fillet_mesh], check_volume=False)
+                    
+                    # Check if union succeeded (non-empty result)
+                    if union_result.vertices.shape[0] > 0 and union_result.faces.shape[0] > 0:
+                        wing_mesh = union_result
+                        # Fix normals after Boolean operation
+                        self.fix_normals_outward(wing_mesh)
+                    else:
+                        # Union produced empty mesh, fall back to concatenation
+                        wing_mesh = trimesh.util.concatenate([wing_mesh, fillet_mesh])
+                except (ValueError, Exception):
                     # If Boolean union fails, fall back to concatenation
-                    print(f"Warning: Boolean union of fillet failed ({e}), using concatenation instead")
                     wing_mesh = trimesh.util.concatenate([wing_mesh, fillet_mesh])
         
         return wing_mesh

@@ -78,6 +78,10 @@ python generate_wing.py input.csv --output rotors.stl [options]
   These sections progressively decrease in size toward the tip, creating a smooth rounded 
   tip edge. Size reduction controlled by `TIP_FILLET_SIZE_REDUCTION` (default: 0.08, 92% final size).
   Extension controlled by `TIP_FILLET_EXTENSION_FACTOR` (default: 0.045, 4.5% of chord). Set to 0 to disable.
+- `--hub-fillet`: Hub-wing fillet size [0.0, 1.0] (default: 0.0).
+  Controls the size of the fillet at the intersection between wings and the central hub.
+  0.0 = no fillet (current behavior), 1.0 = maximum fillet from hub to second NACA section.
+  Creates a lofted solid that improves structural integrity at the wing root.
 
 **3D Printing Enhancement:**
 
@@ -126,6 +130,12 @@ Both files maintain proper outward-pointing normals for correct 3D printing and 
 # This creates two files: rotors.stl (CCW) and wing_cw.stl (CW)
 python generate_wing.py sample_params.csv --output rotors.stl
 
+# Generate wing with hub-wing fillet for improved structural integrity
+python generate_wing.py sample_params.csv --output rotors.stl --hub-fillet 0.5
+
+# Generate wing with maximum hub-wing fillet (extends to second NACA section)
+python generate_wing.py sample_params.csv --output rotors.stl --hub-fillet 1.0
+
 # Generate wing with larger envelope offset (thicker envelope)
 python generate_wing.py sample_params.csv --output rotors.stl --envelope-offset 0.05
 
@@ -137,6 +147,9 @@ python generate_wing.py sample_params.csv --output rotors.stl --tip-fillet-secti
 
 # Generate wing without envelope (sharp edges, not recommended for 3D printing)
 python generate_wing.py sample_params.csv --output rotors.stl --envelope-offset 0.0
+
+# Combine multiple options for maximum structural integrity
+python generate_wing.py sample_params.csv --output rotors.stl --hub-fillet 0.8 --envelope-offset 0.05 --tip-fillet-sections 8
 ```
 
 ### `analysis.py`
