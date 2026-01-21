@@ -594,12 +594,11 @@ class WingGenerator:
         # Parse the root NACA code and scale its thickness
         root_m, root_p, root_t = self.parse_naca4(naca_codes[0])
         root_t_scaled = min(root_t * root_fillet_scale, MAX_NACA_THICKNESS)  # Cap at max valid thickness
-        # Create a modified root NACA code with scaled thickness
-        root_m_scaled = min(root_m * root_fillet_scale, MAX_NACA_CAMBER)  # Cap at max valid camber
         
         # Reconstruct the NACA code for the enlarged root
+        # Only scale thickness, not camber - camber defines the shape, thickness provides structural strength
         # Use round() instead of int() to avoid precision loss
-        enlarged_root_code = f"{round(root_m_scaled * 100)}{round(root_p * 10)}{round(root_t_scaled * 100):02d}"
+        enlarged_root_code = f"{round(root_m * 100)}{round(root_p * 10)}{round(root_t_scaled * 100):02d}"
         
         # Replace the root NACA code with the enlarged version
         naca_codes_modified = [enlarged_root_code] + naca_codes[1:]
