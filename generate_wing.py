@@ -627,6 +627,37 @@ class WingGenerator:
         # Replace the root NACA code with the enlarged version
         naca_codes_modified = [enlarged_root_code] + naca_codes[1:]
         
+        # Scale the root chord length by 10% of the scaling strength
+        # e.g., if root_fillet_scale=8, enlarge root chord by 80% (0.8x)
+        root_chord_scale = 1.0 + (root_fillet_scale - 1.0) * 0.1
+        root_chord_scaled = chord_lengths[0] * root_chord_scale
+        
+        # Calculate maximum allowable chord length based on hub geometry
+        # The root section is Z_OFFSET_OF_BLADES_FOR_BOOLEAN away from center
+        # The hub has radius HUB_RADIUS, so the maximum chord is constrained
+        # by the circular cross-section at that distance from center
+        # For a cylindrical hub, max chord = 2 * HUB_RADIUS (diameter)
+        max_chord_allowance = 2.0 * self.HUB_RADIUS
+        
+        # Clamp root chord to max allowance and track if clamping occurred
+        chord_clamped = False
+        if root_chord_scaled > max_chord_allowance:
+            root_chord_scaled = max_chord_allowance
+            chord_clamped = True
+        
+        # Warn if chord clamping occurred
+        if chord_clamped:
+            warnings.warn(
+                f"Root fillet scale {root_fillet_scale} caused root chord to exceed maximum allowable "
+                f"({chord_lengths[0] * 1000:.3f}mm * {root_chord_scale:.2f} = {root_chord_scaled * 1000:.3f}mm, "
+                f"clamped to {max_chord_allowance * 1000:.3f}mm to fit within hub). "
+                f"Consider using a smaller scale factor.",
+                UserWarning
+            )
+        
+        # Replace the root chord with the scaled version
+        chord_lengths_modified = [root_chord_scaled] + chord_lengths[1:]
+        
         # Account for Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
         # The overall_length parameter represents the distance from rotor center to wing tip,
         # but we offset the wing start by Z_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
@@ -644,7 +675,7 @@ class WingGenerator:
         
         # Create smooth interpolators for chord and twist
         # This treats the specified values as control points for smooth curves
-        chord_interpolator = self.create_smooth_interpolator(chord_lengths, section_positions, kind='cubic')
+        chord_interpolator = self.create_smooth_interpolator(chord_lengths_modified, section_positions, kind='cubic')
         twist_interpolator = self.create_smooth_interpolator(twist_angles, section_positions, kind='cubic')
         
         # Create all sections (defined + blended) with smooth interpolation
