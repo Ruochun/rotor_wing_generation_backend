@@ -20,7 +20,7 @@ python generate_params.py input.csv [options]
 - `--chord-max-thickness`: Maximum chord thickness as percentage (default: 9.0)
 - `--max-camber`: Maximum camber as percentage (default: 6.0)
 - `--max-camber-location`: Location of max camber [0,1], where 0=leading edge (default: 0.4)
-- `--average-chord-length`: Average chord length in meters (default: 0.002). Note: Root section is always fixed at 0.0025m (2.5mm) for rotor hub union.
+- `--average-chord-length`: Average chord length in meters (default: 0.002). Note: Root section is always fixed at 0.0036975m (3.7mm) for rotor hub union.
 - `--chord-length-variance`: Chord length variance [0,1], 0=constant, 1=max variation (default: 0.5). Uses smooth cosine-based transitions.
 - `--max-twist-angle`: Maximum twist angle at root in degrees (default: 40.0)
 - `--n-wings`: Number of wings (default: 3)
@@ -78,10 +78,11 @@ python generate_wing.py input.csv --output rotors.stl [options]
   These sections progressively decrease in size toward the tip, creating a smooth rounded 
   tip edge. Size reduction controlled by `TIP_FILLET_SIZE_REDUCTION` (default: 0.08, 92% final size).
   Extension controlled by `TIP_FILLET_EXTENSION_FACTOR` (default: 0.045, 4.5% of chord). Set to 0 to disable.
-- `--root-fillet-scale`: Scale factor for root section thickness and chord to create a fillet at the
-  hub intersection (default: 7). The root NACA thickness is multiplied by this factor, and the chord
-  is scaled at 10% strength, creating a larger profile that acts as a structural fillet. The scaled
-  chord is automatically clamped to fit within the hub geometry. Typical values: 2.5 to 10.
+- `--root-fillet-scale`: Scale factor for root section thickness to create a fillet at the
+  hub intersection (default: 7). The root NACA thickness is multiplied by this factor, creating a
+  larger profile that acts as a structural fillet. Note: This parameter only affects thickness,
+  NOT chord length. The root chord is always fixed at ROOT_CHORD_LENGTH (1.7 × HUB_RADIUS ≈ 3.7mm).
+  Typical values: 2.5 to 10.
 - `--smooth`: Apply Taubin smoothing to the mesh (default: False). This helps create smoother fillets
   and removes sharp edges. Use this flag to enable whole-mesh smoothing.
 
@@ -119,14 +120,13 @@ The `--tip-fillet-sections` parameter adds progressively smaller NACA sections a
 
 The `--root-fillet-scale` parameter creates a structural fillet at the wing-hub intersection:
 - Scales the root NACA section thickness by the specified factor (e.g., 7× for default)
-- Also scales the root chord length at 10% strength (e.g., 7× scale → 1.6× chord scaling)
-- The scaled root chord is automatically clamped to fit within the hub geometry (2 × HUB_RADIUS)
+- Note: This parameter only affects thickness, NOT chord length. The root chord is always fixed
+  at ROOT_CHORD_LENGTH (1.7 × HUB_RADIUS ≈ 3.7mm) to ensure proper fit within hub geometry.
 - Uses asymmetric power-curve interpolation (α^0.45) between root and second section, favoring
   the second section for rapid thickness transition near the hub
 - This creates a smooth fillet that provides structural reinforcement where needed most
 - Typical values: 2.5 to 10 (default: 7)
-- Higher values create larger, stronger fillets but may exceed hub constraints
-- Warnings are issued if clamping occurs
+- Higher values create larger, stronger fillets with thicker profiles
 
 **Mesh Smoothing:**
 
@@ -260,7 +260,7 @@ The `generate_params.py` script translates abstract design requirements into det
 |---------------------|---------------|-------------|
 | `overall_length` | `overall_length` | Direct mapping |
 | `chord_max_thickness` + `max_camber` + `max_camber_location` | 6x `naca_X` codes | 4-digit NACA airfoil codes |
-| `average_chord_length` + `chord_length_variance` | 6x `chord_X` lengths | Smooth chord distribution along span. Root (chord_0) is always 0.003m. |
+| `average_chord_length` + `chord_length_variance` | 6x `chord_X` lengths | Smooth chord distribution along span. Root (chord_0) is always 0.0036975m (3.7mm). |
 | `max_twist_angle` | 6x `twist_X` angles | Linear interpolation from max to 0 |
 | `n_wings` | `n_wings` | Direct mapping |
 
