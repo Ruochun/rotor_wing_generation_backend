@@ -830,10 +830,13 @@ class WingGenerator:
         Returns:
             Trimesh object representing the hub cylinder
         """
-        # Create cylinder along Z axis (default)
+        # Create high-resolution cylinder along Z axis
+        # Use sections=48 for smooth mesh that works well with smoothing algorithms
+        # (Higher values like 64 cause Boolean operation failures with small holes)
         cylinder = trimesh.creation.cylinder(
             radius=self.HUB_RADIUS,
-            height=self.HUB_HEIGHT
+            height=self.HUB_HEIGHT,
+            sections=48
         )
         
         # Rotate to align along Y axis (rotate 90 degrees around X axis)
@@ -853,12 +856,15 @@ class WingGenerator:
         Returns:
             Trimesh object representing the hole cylinder
         """
-        # Create cylinder along Z axis (default) with slightly larger height
+        # Create high-resolution cylinder along Z axis with slightly larger height
         # to ensure it fully penetrates the hub (1.5x height provides clearance)
+        # Use sections=48 to match hub resolution for clean Boolean operations
+        # (Higher values like 64 cause the small hole cylinder to not be a valid volume)
         HOLE_CLEARANCE_FACTOR = 1.5
         cylinder = trimesh.creation.cylinder(
             radius=self.HOLE_RADIUS,
-            height=self.HUB_HEIGHT * HOLE_CLEARANCE_FACTOR
+            height=self.HUB_HEIGHT * HOLE_CLEARANCE_FACTOR,
+            sections=48
         )
         
         # Rotate to align along Y axis (rotate 90 degrees around X axis)
