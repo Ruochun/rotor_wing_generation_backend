@@ -23,7 +23,7 @@ import numpy as np
 import trimesh
 from scipy import interpolate
 
-Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.0015
+Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.001
 
 # Tip fillet constants
 TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value) × original (default: 92% of original)
@@ -633,11 +633,7 @@ class WingGenerator:
         root_chord_scaled = chord_lengths[0] * root_chord_scale
         
         # Calculate maximum allowable chord length based on hub geometry
-        # The root section is Z_OFFSET_OF_BLADES_FOR_BOOLEAN away from center
-        # The hub has radius HUB_RADIUS, so the maximum chord is constrained
-        # by the circular cross-section at that distance from center
-        # For a cylindrical hub, max chord = 2 * HUB_RADIUS (diameter)
-        max_chord_allowance = 2.0 * self.HUB_RADIUS
+        max_chord_allowance = 1.7 * self.HUB_RADIUS
         
         # Clamp root chord to max allowance and track if clamping occurred
         chord_clamped = False
@@ -956,7 +952,7 @@ class WingGenerator:
             mesh, 
             lamb=0.5,  # Smoothing factor
             # nu=0.5,    # Negative smoothing factor (helps preserve volume)
-            iterations=30
+            iterations=1000
         )
         
         return smoothed_mesh
@@ -1051,6 +1047,7 @@ class WingGenerator:
         
         # Load hub with hole from external STL file
         hub_with_hole = trimesh.load('rotor_hub.stl')
+        hub_with_hole.apply_scale(1. / 1000.0)  # Convert from mm to meters 
         
         # Fix normals on the loaded hub mesh
         self.fix_normals_outward(hub_with_hole)
@@ -1148,9 +1145,9 @@ def main():
                             'creating a smooth rounded tip edge. Size reduction controlled by '
                             'TIP_FILLET_SIZE_REDUCTION (default: 0.08, 92%% final size). Extension '
                             'controlled by TIP_FILLET_EXTENSION_FACTOR (default: 0.045, 4.5%% of chord).')
-    parser.add_argument('--root-fillet-scale', type=float, default=6.0,
+    parser.add_argument('--root-fillet-scale', type=float, default=7.0,
                        help='Scale factor for root section thickness to create a fillet at the '
-                            'hub intersection (default: 6). The root NACA thickness is multiplied '
+                            'hub intersection (default: 7). The root NACA thickness is multiplied '
                             'by this factor, creating a larger profile that acts as a fillet for '
                             'structural integrity. Typical values: 2.5 to 10.')
     parser.add_argument('--smooth-angle-threshold', type=float, default=60.0,
