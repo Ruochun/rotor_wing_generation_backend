@@ -31,7 +31,7 @@ TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (
 
 # Root fillet constants
 ROOT_FILLET_NUM_SECTIONS = 8  # Number of sections to create when root_fillet_size = 1.0 (maximum fillet)
-ROOT_FILLET_START_OFFSET = 0.0002  # Start offset above Z_OFFSET_OF_BLADES_FOR_BOOLEAN in meters (0.2mm)
+ROOT_FILLET_START_OFFSET = 0.0002  # Start offset in wing-local coordinates in meters (0.2mm)
 
 class WingGenerator:
     """
@@ -597,7 +597,10 @@ class WingGenerator:
             # At root_fillet_size = 0.0, use 0 sections
             n_root_fillet_sections = int(root_fillet_size * ROOT_FILLET_NUM_SECTIONS)
             
-            if n_root_fillet_sections > 0:
+            if n_root_fillet_sections > 0 and n_sections > 1:
+                # Only generate fillet if there are at least 2 wing sections
+                # (need second section to define fillet span)
+                
                 # Get parameters for the first (root) and second wing sections
                 first_m, first_p, first_t = self.parse_naca4(naca_codes[0])
                 first_chord = chord_lengths[0]
@@ -605,7 +608,7 @@ class WingGenerator:
                 
                 # Get position of first and second sections
                 first_section_z = section_positions[0]
-                second_section_z = section_positions[1] if n_sections > 1 else section_positions[0]
+                second_section_z = section_positions[1]
                 
                 # Calculate the span for the fillet
                 # Fillet starts in wing-local coordinates at ROOT_FILLET_START_OFFSET
