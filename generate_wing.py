@@ -31,9 +31,11 @@ TIP_FILLET_EXTENSION_FACTOR = 0.045  # Fillet extends beyond last section by thi
 TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (higher = steeper taper)
 
 # Root fillet constants
-ROOT_FILLET_BLEND_EXPONENT = 2.5  # Power curve exponent for root-to-second section blending (higher = faster transition near root)
+ROOT_FILLET_BLEND_EXPONENT = .45  # Power curve exponent for root-to-second section blending (higher = faster transition near root)
 MAX_NACA_THICKNESS = 0.99  # Maximum valid thickness for NACA airfoils (99% of chord)
 MAX_NACA_CAMBER = 0.09  # Maximum valid camber for NACA airfoils (9% of chord) - Note: NACA 4-digit codes use single digits (0-9) for camber
+
+ROOT_BLEND_MORE_MULTIPLIER = 5 # Multiplier for number of blend sections between root and second section to improve smoothness with root fillet
 
 class WingGenerator:
     """
@@ -44,7 +46,7 @@ class WingGenerator:
     # These are fixed dimensions as specified in the design requirements
     HUB_RADIUS = 0.00435 / 2.  # Hub cylinder radius in meters
     HUB_HEIGHT = 0.0052   # Hub cylinder height in meters
-    HOLE_DIAMETER = 0.0008  # Center hole diameter in meters
+    HOLE_DIAMETER = 0.00081  # Center hole diameter in meters
     HOLE_RADIUS = HOLE_DIAMETER / 2  # Center hole radius in meters
     
     def __init__(self):
@@ -655,8 +657,12 @@ class WingGenerator:
             
             # Add blend section positions between this and next section
             if i < n_sections - 1:
-                for k in range(1, n_blend_sections + 1):
-                    alpha = k / float(n_blend_sections + 1)
+                n_blend_sections_in_use = n_blend_sections
+                # If it's the root, since we have a fillet there, blend more
+                if i == 0:
+                    n_blend_sections_in_use = n_blend_sections * ROOT_BLEND_MORE_MULTIPLIER
+                for k in range(1, n_blend_sections_in_use + 1):
+                    alpha = k / float(n_blend_sections_in_use + 1)
                     z_pos = (1 - alpha) * section_positions[i] + alpha * section_positions[i + 1]
                     all_positions.append(z_pos)
         
@@ -683,9 +689,14 @@ class WingGenerator:
             
             # Add blend sections between this and next section
             if i < n_sections - 1:
-                for k in range(1, n_blend_sections + 1):
+                n_blend_sections_in_use = n_blend_sections
+                # If it's the root, since we have a fillet there, blend more
+                if i == 0:
+                    n_blend_sections_in_use = n_blend_sections * ROOT_BLEND_MORE_MULTIPLIER
+
+                for k in range(1, n_blend_sections_in_use + 1):
                     z_pos = all_positions[section_idx]
-                    alpha = k / (n_blend_sections + 1)
+                    alpha = k / (n_blend_sections_in_use + 1)
                     
                     # Use custom blend for root-to-second section transition (i == 0)
                     # Regular blend for all other sections
@@ -1059,11 +1070,11 @@ def main():
                             'creating a smooth rounded tip edge. Size reduction controlled by '
                             'TIP_FILLET_SIZE_REDUCTION (default: 0.08, 92%% final size). Extension '
                             'controlled by TIP_FILLET_EXTENSION_FACTOR (default: 0.045, 4.5%% of chord).')
-    parser.add_argument('--root-fillet-scale', type=float, default=3.5,
+    parser.add_argument('--root-fillet-scale', type=float, default=6.0,
                        help='Scale factor for root section thickness to create a fillet at the '
-                            'hub intersection (default: 3.5). The root NACA thickness is multiplied '
+                            'hub intersection (default: 6). The root NACA thickness is multiplied '
                             'by this factor, creating a larger profile that acts as a fillet for '
-                            'structural integrity. Typical values: 2.5 to 4.5.')
+                            'structural integrity. Typical values: 2.5 to 10.')
     
     args = parser.parse_args()
     
