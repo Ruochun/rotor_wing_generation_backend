@@ -22,6 +22,7 @@ from typing import List, Tuple, Dict, Optional
 import numpy as np
 import trimesh
 from scipy import interpolate
+from shapely.geometry import Point
 
 Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.0015
 
@@ -826,18 +827,33 @@ class WingGenerator:
     def create_hub_cylinder(self) -> trimesh.Trimesh:
         """
         Create a cylindrical hub centered at the origin along the Y axis.
+        Uses extrusion with multiple layers for better mesh quality during smoothing.
         
         Returns:
             Trimesh object representing the hub cylinder
         """
-        # Create high-resolution cylinder along Z axis
-        # Use sections=48 for smooth mesh that works well with smoothing algorithms
-        # (Higher values like 64 cause Boolean operation failures with small holes)
-        cylinder = trimesh.creation.cylinder(
-            radius=self.HUB_RADIUS,
-            height=self.HUB_HEIGHT,
-            sections=48
+        # Parameters for high-quality layered cylinder
+        sections = 48  # Number of vertices around the circumference
+        layers = 10    # Number of layers along the height (creates multiple rings of triangles)
+        
+        # Create 2D circle polygon using shapely
+        circle = Point(0.0, 0.0).buffer(self.HUB_RADIUS, resolution=sections)
+        
+        # Create z positions for multiple layers along the height
+        z = np.linspace(0.0, self.HUB_HEIGHT, layers + 1)
+        
+        # Extrude the circle with multiple steps to create layered mesh
+        # This creates a cylinder with multiple rings of triangles along its height,
+        # providing much better mesh quality for smoothing operations
+        cylinder = trimesh.creation.extrude_polygon(
+            circle, 
+            height=self.HUB_HEIGHT, 
+            transform=None, 
+            steps=z
         )
+        
+        # Center the cylinder (extrude_polygon creates cylinder from z=0 to z=height)
+        cylinder.apply_translation([0, 0, -self.HUB_HEIGHT / 2])
         
         # Rotate to align along Y axis (rotate 90 degrees around X axis)
         transform = trimesh.transformations.rotation_matrix(
@@ -852,20 +868,35 @@ class WingGenerator:
     def create_hole_cylinder(self) -> trimesh.Trimesh:
         """
         Create a cylindrical hole to be drilled through the hub.
+        Uses extrusion with multiple layers to match hub mesh quality.
         
         Returns:
             Trimesh object representing the hole cylinder
         """
-        # Create high-resolution cylinder along Z axis with slightly larger height
+        # Create high-resolution layered cylinder with slightly larger height
         # to ensure it fully penetrates the hub (1.5x height provides clearance)
-        # Use sections=48 to match hub resolution for clean Boolean operations
-        # (Higher values like 64 cause the small hole cylinder to not be a valid volume)
         HOLE_CLEARANCE_FACTOR = 1.5
-        cylinder = trimesh.creation.cylinder(
-            radius=self.HOLE_RADIUS,
-            height=self.HUB_HEIGHT * HOLE_CLEARANCE_FACTOR,
-            sections=48
+        sections = 48  # Number of vertices around the circumference
+        layers = 10    # Number of layers along the height
+        
+        hole_height = self.HUB_HEIGHT * HOLE_CLEARANCE_FACTOR
+        
+        # Create 2D circle polygon using shapely
+        circle = Point(0.0, 0.0).buffer(self.HOLE_RADIUS, resolution=sections)
+        
+        # Create z positions for multiple layers along the height
+        z = np.linspace(0.0, hole_height, layers + 1)
+        
+        # Extrude the circle with multiple steps to create layered mesh
+        cylinder = trimesh.creation.extrude_polygon(
+            circle, 
+            height=hole_height, 
+            transform=None, 
+            steps=z
         )
+        
+        # Center the cylinder
+        cylinder.apply_translation([0, 0, -hole_height / 2])
         
         # Rotate to align along Y axis (rotate 90 degrees around X axis)
         transform = trimesh.transformations.rotation_matrix(
