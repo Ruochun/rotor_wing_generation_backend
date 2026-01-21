@@ -241,9 +241,7 @@ When generating multiple wings (n_wings > 1), the script automatically shifts ea
 - numpy
 - scipy
 - trimesh
-- shapely (required for extrusion-based hub cylinder generation)
 - manifold3d (required for Boolean operations in hub generation)
-- mapbox-earcut (required for polygon triangulation in extrusion)
 - networkx (optional, for mesh repair operations)
 
 Install dependencies:
@@ -255,7 +253,7 @@ pip install -r requirements.txt
 Or install manually:
 
 ```bash
-pip install numpy scipy trimesh shapely manifold3d mapbox-earcut networkx
+pip install numpy scipy trimesh manifold3d networkx
 ```
 
 ## Distribution as Executables
