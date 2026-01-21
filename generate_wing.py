@@ -598,7 +598,21 @@ class WingGenerator:
         # Reconstruct the NACA code for the enlarged root
         # Only scale thickness, not camber - camber defines the shape, thickness provides structural strength
         # Use round() instead of int() to avoid precision loss
-        enlarged_root_code = f"{round(root_m * 100)}{round(root_p * 10)}{round(root_t_scaled * 100):02d}"
+        # Clamp all values to valid NACA 4-digit ranges (0-9 for first two digits, 01-99 for last two)
+        m_digit = max(0, min(9, round(root_m * 100)))
+        p_digit = max(0, min(9, round(root_p * 10)))
+        t_digits = max(1, min(99, round(root_t_scaled * 100)))
+        enlarged_root_code = f"{m_digit}{p_digit}{t_digits:02d}"
+        
+        # Warn if clamping occurred (indicates fillet scale may be too large)
+        if root_t_scaled >= MAX_NACA_THICKNESS:
+            import warnings
+            warnings.warn(
+                f"Root fillet scale {root_fillet_scale} caused thickness to exceed maximum "
+                f"({root_t * 100:.1f}% * {root_fillet_scale} = {root_t_scaled * 100:.1f}%, "
+                f"clamped to {MAX_NACA_THICKNESS * 100:.0f}%). Consider using a smaller scale factor.",
+                UserWarning
+            )
         
         # Replace the root NACA code with the enlarged version
         naca_codes_modified = [enlarged_root_code] + naca_codes[1:]
