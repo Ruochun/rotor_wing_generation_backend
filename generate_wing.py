@@ -29,6 +29,9 @@ TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value)
 TIP_FILLET_EXTENSION_FACTOR = 0.045  # Fillet extends beyond last section by this factor × tip_chord (default: 4.5% of tip chord)
 TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (higher = steeper taper)
 
+# Root fillet constants
+ROOT_FILLET_NUM_SECTIONS = 8  # Number of sections to create when root_fillet_size = 1.0 (maximum fillet)
+
 class WingGenerator:
     """
     Generates 3D wing geometry from parametric design specifications.
@@ -524,7 +527,8 @@ class WingGenerator:
                                   n_blend_sections: int = 6,
                                   n_profile_points: int = 50,
                                   envelope_offset: float = 0.0,
-                                  n_tip_fillet_sections: int = 5) -> trimesh.Trimesh:
+                                  n_tip_fillet_sections: int = 5,
+                                  root_fillet_size: float = 0.0) -> trimesh.Trimesh:
         """
         Generate a complete wing mesh from parameter dictionary.
         
@@ -541,6 +545,10 @@ class WingGenerator:
                            TIP_FILLET_SIZE_REDUCTION constant (default: 0.08, creating 92% final size).
                            The extension distance is controlled by TIP_FILLET_EXTENSION_FACTOR constant
                            (default: 0.045, extending 4.5% of tip chord).
+            root_fillet_size: Size of fillet at wing-hub intersection (0.0 to 1.0, default: 0.0).
+                           0.0 = no fillet (current behavior), 1.0 = maximum fillet that spans from
+                           near the hub top to the second NACA section. Intermediate values scale
+                           the number of fillet sections proportionally.
             
         Returns:
             Trimesh object of the wing
@@ -575,6 +583,81 @@ class WingGenerator:
         # Create all sections (defined + blended) with smooth interpolation
         all_sections = []
         all_positions = []
+        
+        # Add root fillet sections if requested
+        # These sections provide a smooth transition from the hub to the wing root,
+        # improving structural integrity at the wing-hub intersection
+        if root_fillet_size > 0.0:
+            # Clamp root_fillet_size to valid range [0, 1]
+            root_fillet_size = max(0.0, min(1.0, root_fillet_size))
+            
+            # Calculate number of fillet sections based on fillet size
+            # At root_fillet_size = 1.0, use ROOT_FILLET_NUM_SECTIONS
+            # At root_fillet_size = 0.0, use 0 sections
+            n_root_fillet_sections = int(root_fillet_size * ROOT_FILLET_NUM_SECTIONS)
+            
+            if n_root_fillet_sections > 0:
+                # Get parameters for the first (root) and second wing sections
+                first_m, first_p, first_t = self.parse_naca4(naca_codes[0])
+                first_chord = chord_lengths[0]
+                first_twist = twist_angles[0]
+                
+                # Get position of first and second sections
+                first_section_z = section_positions[0]
+                second_section_z = section_positions[1] if n_sections > 1 else section_positions[0]
+                
+                # Calculate the span for the fillet
+                # At root_fillet_size = 1.0, fillet should extend from a point near the hub top
+                # to the second NACA section
+                # Hub top is at approximately HUB_HEIGHT / 2, but wings start at Z_OFFSET
+                # So we start fillet slightly above Z_OFFSET to avoid interfering with hub
+                fillet_start_offset = 0.0002  # Small offset above Z_OFFSET (0.2mm)
+                fillet_start_z = fillet_start_offset
+                
+                # Fillet end position scales with root_fillet_size:
+                # At 0.0: ends at first section (no fillet visible)
+                # At 1.0: ends at second section (maximum fillet)
+                fillet_end_z = first_section_z + root_fillet_size * (second_section_z - first_section_z)
+                
+                # Generate fillet sections from fillet start to fillet end
+                for k in range(1, n_root_fillet_sections + 1):
+                    # Progressive scaling factor from 0 (near hub) to 1 (at wing)
+                    alpha = k / (n_root_fillet_sections + 1)
+                    
+                    # Position along the fillet span
+                    z_pos = fillet_start_z + alpha * (fillet_end_z - fillet_start_z)
+                    
+                    # Progressive size increase from small (near hub) to full size (at wing)
+                    # Use power curve for smooth transition
+                    alpha_curved = alpha ** TIP_FILLET_REDUCTION_EXPONENT
+                    size_factor = alpha_curved
+                    
+                    # Scale the airfoil parameters
+                    fillet_t = first_t * size_factor
+                    fillet_m = first_m * size_factor
+                    fillet_p = first_p if first_p > 0 else 0.5  # Avoid division by zero
+                    
+                    # Generate the fillet section profile
+                    profile = self.generate_naca4_profile(fillet_m, fillet_p, fillet_t, n_profile_points)
+                    
+                    # Apply envelope offset
+                    profile = self.offset_profile(profile, envelope_offset)
+                    
+                    # Scale the chord
+                    fillet_chord = first_chord * size_factor
+                    
+                    # Use smoothly interpolated twist (or first section twist if outside range)
+                    try:
+                        fillet_twist = float(twist_interpolator(z_pos))
+                    except:
+                        fillet_twist = first_twist
+                    
+                    # Transform profile to 3D section
+                    section = self.transform_profile_to_section(
+                        profile, z_pos, fillet_chord, fillet_twist, self.wing_start_location
+                    )
+                    all_sections.append(section)
+                    all_positions.append(z_pos)
         
         for i in range(n_sections):
             # Add the defined section
@@ -815,7 +898,8 @@ class WingGenerator:
                                 n_blend_sections: int = 6,
                                 n_profile_points: int = 50,
                                 envelope_offset: float = 0.0,
-                                n_tip_fillet_sections: int = 5) -> trimesh.Trimesh:
+                                n_tip_fillet_sections: int = 5,
+                                root_fillet_size: float = 0.0) -> trimesh.Trimesh:
         """
         Generate a complete wing design with multiple wings arranged circularly
         and a central hub with a drilled hole.
@@ -831,13 +915,17 @@ class WingGenerator:
                            a smooth rounded tip edge. The size reduction is controlled by the
                            TIP_FILLET_SIZE_REDUCTION constant (default: 0.08). The extension distance
                            is controlled by TIP_FILLET_EXTENSION_FACTOR constant (default: 0.045).
+            root_fillet_size: Size of fillet at wing-hub intersection (0.0 to 1.0, default: 0.0).
+                           0.0 = no fillet (current behavior), 1.0 = maximum fillet that spans from
+                           near the hub top to the second NACA section.
             
         Returns:
             Combined mesh of all wings merged with the hub
         """
         # Generate the base wing
         base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points, 
-                                                   envelope_offset, n_tip_fillet_sections)
+                                                   envelope_offset, n_tip_fillet_sections,
+                                                   root_fillet_size)
         
         # Fix normals on base wing to ensure they point outward
         # self.fix_normals_outward(base_wing)
@@ -970,6 +1058,12 @@ def main():
                             'creating a smooth rounded tip edge. Size reduction controlled by '
                             'TIP_FILLET_SIZE_REDUCTION (default: 0.08, 92%% final size). Extension '
                             'controlled by TIP_FILLET_EXTENSION_FACTOR (default: 0.045, 4.5%% of chord).')
+    parser.add_argument('--root-fillet-size', type=float, default=0.0,
+                       help='Size of fillet at wing-hub intersection (default: 0.0). '
+                            'Range: 0.0 to 1.0. '
+                            '0.0 = no fillet (current behavior). '
+                            '1.0 = maximum fillet spanning from near hub top to second NACA section. '
+                            'Improves structural integrity at the wing root.')
     
     args = parser.parse_args()
     
@@ -983,6 +1077,7 @@ def main():
     print(f"  Number of sections: {params['n_sections']}")
     print(f"  Envelope offset: {args.envelope_offset:.4f} (as fraction of chord)")
     print(f"  Tip fillet sections: {args.tip_fillet_sections}")
+    print(f"  Root fillet size: {args.root_fillet_size:.4f}")
     
     # Generate wing
     print("Generating wing geometry...")
@@ -992,7 +1087,8 @@ def main():
         n_blend_sections=args.blend_sections,
         n_profile_points=args.profile_points,
         envelope_offset=args.envelope_offset,
-        n_tip_fillet_sections=args.tip_fillet_sections
+        n_tip_fillet_sections=args.tip_fillet_sections,
+        root_fillet_size=args.root_fillet_size
     )
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
