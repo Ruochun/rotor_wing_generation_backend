@@ -608,10 +608,10 @@ class WingGenerator:
                 second_section_z = section_positions[1] if n_sections > 1 else section_positions[0]
                 
                 # Calculate the span for the fillet
-                # At root_fillet_size = 1.0, fillet should extend from a point near the hub top
-                # to the second NACA section
-                # Hub top is at approximately HUB_HEIGHT / 2, but wings start at Z_OFFSET
-                # So we start fillet slightly above Z_OFFSET to avoid interfering with hub
+                # Fillet starts in wing-local coordinates at ROOT_FILLET_START_OFFSET
+                # When transformed to world coordinates, this becomes:
+                # z_world = ROOT_FILLET_START_OFFSET + Z_OFFSET_OF_BLADES_FOR_BOOLEAN
+                # This positions the fillet start between the wing root and hub top
                 fillet_start_z = ROOT_FILLET_START_OFFSET
                 
                 # Fillet end position scales with root_fillet_size:
