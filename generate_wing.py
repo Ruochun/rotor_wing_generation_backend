@@ -31,6 +31,7 @@ TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (
 
 # Root fillet constants
 ROOT_FILLET_NUM_SECTIONS = 8  # Number of sections to create when root_fillet_size = 1.0 (maximum fillet)
+ROOT_FILLET_START_OFFSET = 0.0002  # Start offset above Z_OFFSET_OF_BLADES_FOR_BOOLEAN in meters (0.2mm)
 
 class WingGenerator:
     """
@@ -611,8 +612,7 @@ class WingGenerator:
                 # to the second NACA section
                 # Hub top is at approximately HUB_HEIGHT / 2, but wings start at Z_OFFSET
                 # So we start fillet slightly above Z_OFFSET to avoid interfering with hub
-                fillet_start_offset = 0.0002  # Small offset above Z_OFFSET (0.2mm)
-                fillet_start_z = fillet_start_offset
+                fillet_start_z = ROOT_FILLET_START_OFFSET
                 
                 # Fillet end position scales with root_fillet_size:
                 # At 0.0: ends at first section (no fillet visible)
@@ -633,9 +633,10 @@ class WingGenerator:
                     size_factor = alpha_curved
                     
                     # Scale the airfoil parameters
+                    # Note: NACA profiles can have p = 0 (symmetric), which is valid
                     fillet_t = first_t * size_factor
                     fillet_m = first_m * size_factor
-                    fillet_p = first_p if first_p > 0 else 0.5  # Avoid division by zero
+                    fillet_p = first_p
                     
                     # Generate the fillet section profile
                     profile = self.generate_naca4_profile(fillet_m, fillet_p, fillet_t, n_profile_points)
@@ -646,10 +647,11 @@ class WingGenerator:
                     # Scale the chord
                     fillet_chord = first_chord * size_factor
                     
-                    # Use smoothly interpolated twist (or first section twist if outside range)
-                    try:
+                    # Use smoothly interpolated twist if z_pos is within interpolator range
+                    # Otherwise use first section twist
+                    if z_pos <= section_positions[-1]:
                         fillet_twist = float(twist_interpolator(z_pos))
-                    except:
+                    else:
                         fillet_twist = first_twist
                     
                     # Transform profile to 3D section
