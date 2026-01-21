@@ -29,6 +29,11 @@ TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value)
 TIP_FILLET_EXTENSION_FACTOR = 0.045  # Fillet extends beyond last section by this factor × tip_chord (default: 4.5% of tip chord)
 TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (higher = steeper taper)
 
+# Root fillet constants
+ROOT_FILLET_BLEND_EXPONENT = 2.5  # Power curve exponent for root-to-second section blending (higher = faster transition near root)
+MAX_NACA_THICKNESS = 0.99  # Maximum valid thickness for NACA airfoils (99% of chord)
+MAX_NACA_CAMBER = 0.09  # Maximum valid camber for NACA airfoils (9% of chord)
+
 class WingGenerator:
     """
     Generates 3D wing geometry from parametric design specifications.
@@ -404,7 +409,7 @@ class WingGenerator:
         # Use a power curve to favor the second section
         # This makes the transition happen more quickly near the root
         # Higher exponent = faster transition near root, staying closer to section b
-        alpha_curved = alpha ** 2.5
+        alpha_curved = alpha ** ROOT_FILLET_BLEND_EXPONENT
         
         m = (1 - alpha_curved) * m_a + alpha_curved * m_b
         p = (1 - alpha_curved) * p_a + alpha_curved * p_b
@@ -588,12 +593,13 @@ class WingGenerator:
         # Apply root fillet scale to the root NACA code
         # Parse the root NACA code and scale its thickness
         root_m, root_p, root_t = self.parse_naca4(naca_codes[0])
-        root_t_scaled = min(root_t * root_fillet_scale, 0.99)  # Cap at 99% to stay valid
+        root_t_scaled = min(root_t * root_fillet_scale, MAX_NACA_THICKNESS)  # Cap at max valid thickness
         # Create a modified root NACA code with scaled thickness
-        root_m_scaled = min(root_m * root_fillet_scale, 0.09)  # Cap camber at 9%
+        root_m_scaled = min(root_m * root_fillet_scale, MAX_NACA_CAMBER)  # Cap at max valid camber
         
         # Reconstruct the NACA code for the enlarged root
-        enlarged_root_code = f"{int(root_m_scaled * 100)}{int(root_p * 10)}{int(root_t_scaled * 100):02d}"
+        # Use round() instead of int() to avoid precision loss
+        enlarged_root_code = f"{round(root_m_scaled * 100)}{round(root_p * 10)}{round(root_t_scaled * 100):02d}"
         
         # Replace the root NACA code with the enlarged version
         naca_codes_modified = [enlarged_root_code] + naca_codes[1:]
