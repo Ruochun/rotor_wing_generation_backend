@@ -535,7 +535,11 @@ class WingGenerator:
         # At hub_fillet=0.0, rectangular height = NACA height (no fillet effect)
         # At hub_fillet=1.0, rectangular height = hub height (maximum fillet)
         rect_height = naca_height + hub_fillet * (self.HUB_HEIGHT - naca_height)
-        rect_width = root_chord
+        
+        # Calculate rectangular width accounting for twist angle
+        # The twist angle reduces the effective coverage of the rectangular base
+        root_twist_rad = math.radians(params['twist_0'])
+        rect_width = root_chord * math.cos(root_twist_rad)
         
         # Generate a reference NACA profile to get a base count for target points
         # The actual point count after offset varies due to trailing edge points
@@ -586,30 +590,40 @@ class WingGenerator:
                 # Resample to ensure consistent point count
                 section = self.resample_profile(section, n_points_target)
             else:
-                # Intermediate section: blend between rectangular and NACA
-                # For simplicity, we use a morphed NACA profile that gradually transitions
-                # from the rectangular shape to the target NACA shape
+                # Intermediate section: linearly interpolate between rectangular and NACA profiles
+                # Rather than generating intermediate NACA shapes, we connect corresponding nodes
+                # between the rectangular end and the NACA end
                 
-                # Blend NACA parameters
-                if hub_fillet > HUB_FILLET_MAX_THRESHOLD:
-                    m, p, t = self.parse_naca4(naca_code_1)
-                    target_chord = params['chord_1']
-                    target_twist = params['twist_1']
+                # We need the first and last sections to interpolate between
+                # Generate them if we haven't already (i.e., on first intermediate section)
+                if i == 1:
+                    # Store the first (rectangular) section
+                    first_section = loft_sections[0]
+                    
+                    # Generate the last (NACA) section
+                    if hub_fillet > HUB_FILLET_MAX_THRESHOLD:
+                        m, p, t = self.parse_naca4(naca_code_1)
+                        chord = params['chord_1']
+                        twist = params['twist_1']
+                    else:
+                        m, p, t = self.blend_naca_codes(naca_code_0, naca_code_1, hub_fillet)
+                        chord = root_chord + hub_fillet * (params['chord_1'] - root_chord)
+                        twist = params['twist_0'] + hub_fillet * (params['twist_1'] - params['twist_0'])
+                    
+                    profile = self.generate_naca4_profile(m, p, t, n_profile_points)
+                    profile = self.offset_profile(profile, envelope_offset)
+                    last_section = self.transform_profile_to_section(profile, z_naca_end, chord, twist, self.wing_start_location)
+                    last_section = self.resample_profile(last_section, n_points_target)
+                    
+                    # Store for reuse in subsequent iterations
+                    self._fillet_first_section = first_section
+                    self._fillet_last_section = last_section
                 else:
-                    m, p, t = self.blend_naca_codes(naca_code_0, naca_code_1, hub_fillet)
-                    target_chord = root_chord + hub_fillet * (params['chord_1'] - root_chord)
-                    target_twist = params['twist_0'] + hub_fillet * (params['twist_1'] - params['twist_0'])
+                    first_section = self._fillet_first_section
+                    last_section = self._fillet_last_section
                 
-                # Interpolate chord and twist
-                chord = rect_width + alpha * (target_chord - rect_width)
-                twist = alpha * target_twist
-                
-                # Generate NACA profile and transform
-                profile = self.generate_naca4_profile(m, p, t, n_profile_points)
-                profile = self.offset_profile(profile, envelope_offset)
-                section = self.transform_profile_to_section(profile, z_pos, chord, twist, self.wing_start_location)
-                # Resample to ensure consistent point count
-                section = self.resample_profile(section, n_points_target)
+                # Linearly interpolate between first and last sections
+                section = (1 - alpha) * first_section + alpha * last_section
             
             loft_sections.append(section)
         
