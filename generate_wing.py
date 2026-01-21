@@ -16,6 +16,7 @@ The system supports the 34-parameter wing design format used in this project:
 import csv
 import math
 import os
+import warnings
 from typing import List, Tuple, Dict, Optional
 
 import numpy as np
@@ -593,7 +594,13 @@ class WingGenerator:
         # Apply root fillet scale to the root NACA code
         # Parse the root NACA code and scale its thickness
         root_m, root_p, root_t = self.parse_naca4(naca_codes[0])
-        root_t_scaled = min(root_t * root_fillet_scale, MAX_NACA_THICKNESS)  # Cap at max valid thickness
+        root_t_scaled = root_t * root_fillet_scale
+        
+        # Clamp to valid range and track if clamping occurred
+        thickness_clamped = False
+        if root_t_scaled > MAX_NACA_THICKNESS:
+            root_t_scaled = MAX_NACA_THICKNESS
+            thickness_clamped = True
         
         # Reconstruct the NACA code for the enlarged root
         # Only scale thickness, not camber - camber defines the shape, thickness provides structural strength
@@ -604,12 +611,11 @@ class WingGenerator:
         t_digits = max(1, min(99, round(root_t_scaled * 100)))
         enlarged_root_code = f"{m_digit}{p_digit}{t_digits:02d}"
         
-        # Warn if clamping occurred (indicates fillet scale may be too large)
-        if root_t_scaled >= MAX_NACA_THICKNESS:
-            import warnings
+        # Warn if clamping occurred (indicates fillet scale may be inappropriate)
+        if thickness_clamped:
             warnings.warn(
                 f"Root fillet scale {root_fillet_scale} caused thickness to exceed maximum "
-                f"({root_t * 100:.1f}% * {root_fillet_scale} = {root_t_scaled * 100:.1f}%, "
+                f"({root_t * 100:.1f}% * {root_fillet_scale} = {root_t * root_fillet_scale * 100:.1f}%, "
                 f"clamped to {MAX_NACA_THICKNESS * 100:.0f}%). Consider using a smaller scale factor.",
                 UserWarning
             )
