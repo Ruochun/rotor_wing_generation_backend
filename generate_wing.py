@@ -483,7 +483,7 @@ class WingGenerator:
         return points
     
     def create_hub_fillet(self, params: Dict, n_profile_points: int = 50,
-                         hub_fillet: float = 0.0, n_loft_sections: int = 10,
+                         hub_fillet: float = 0.0, n_loft_sections: int = 50,
                          envelope_offset: float = 0.0) -> Optional[trimesh.Trimesh]:
         """
         Create a lofted fillet solid that transitions from a rectangular profile at the hub
@@ -1239,8 +1239,8 @@ def main():
                             'creating a smooth rounded tip edge. Size reduction controlled by '
                             'TIP_FILLET_SIZE_REDUCTION (default: 0.08, 92%% final size). Extension '
                             'controlled by TIP_FILLET_EXTENSION_FACTOR (default: 0.045, 4.5%% of chord).')
-    parser.add_argument('--hub-fillet', type=float, default=0.0,
-                       help='Hub-wing fillet size [0.0, 1.0] (default: 0.0). '
+    parser.add_argument('--hub-fillet', type=float, default=1.0,
+                       help='Hub-wing fillet size [0.0, 1.0] (default: 1.0). '
                             '0.0 = no fillet (current behavior), '
                             '1.0 = maximum fillet from hub to second NACA section. '
                             'Creates a lofted solid to improve structural integrity at the wing root.')
