@@ -16,18 +16,26 @@ The system supports the 34-parameter wing design format used in this project:
 import csv
 import math
 import os
+import warnings
 from typing import List, Tuple, Dict, Optional
 
 import numpy as np
 import trimesh
 from scipy import interpolate
 
-Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.0015
+Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.001
 
 # Tip fillet constants
 TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value) × original (default: 92% of original)
 TIP_FILLET_EXTENSION_FACTOR = 0.045  # Fillet extends beyond last section by this factor × tip_chord (default: 4.5% of tip chord)
 TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (higher = steeper taper)
+
+# Root fillet constants
+ROOT_FILLET_BLEND_EXPONENT = .45  # Power curve exponent for root-to-second section blending (higher = faster transition near root)
+MAX_NACA_THICKNESS = 0.99  # Maximum valid thickness for NACA airfoils (99% of chord)
+MAX_NACA_CAMBER = 0.09  # Maximum valid camber for NACA airfoils (9% of chord) - Note: NACA 4-digit codes use single digits (0-9) for camber
+
+ROOT_BLEND_MORE_MULTIPLIER = 5 # Multiplier for number of blend sections between root and second section to improve smoothness with root fillet
 
 class WingGenerator:
     """
@@ -38,7 +46,7 @@ class WingGenerator:
     # These are fixed dimensions as specified in the design requirements
     HUB_RADIUS = 0.00435 / 2.  # Hub cylinder radius in meters
     HUB_HEIGHT = 0.0052   # Hub cylinder height in meters
-    HOLE_DIAMETER = 0.0008  # Center hole diameter in meters
+    HOLE_DIAMETER = 0.00081  # Center hole diameter in meters
     HOLE_RADIUS = HOLE_DIAMETER / 2  # Center hole radius in meters
     
     def __init__(self):
@@ -384,6 +392,34 @@ class WingGenerator:
         
         return m, p, t
     
+    def blend_naca_codes_root_fillet(self, code_a: str, code_b: str, alpha: float) -> Tuple[float, float, float]:
+        """
+        Blend two NACA codes with custom interpolation favoring the second section.
+        This creates a fillet effect where the profile expands more quickly near the root
+        (not near the second section), making the near-hub region look like a fillet.
+        
+        Args:
+            code_a: First NACA code (root, with enlarged thickness)
+            code_b: Second NACA code (normal section)
+            alpha: Blending factor (0 = code_a, 1 = code_b)
+            
+        Returns:
+            Tuple of (m, p, t) for the blended airfoil
+        """
+        m_a, p_a, t_a = self.parse_naca4(code_a)
+        m_b, p_b, t_b = self.parse_naca4(code_b)
+        
+        # Use a power curve to favor the second section
+        # This makes the transition happen more quickly near the root
+        # Higher exponent = faster transition near root, staying closer to section b
+        alpha_curved = alpha ** ROOT_FILLET_BLEND_EXPONENT
+        
+        m = (1 - alpha_curved) * m_a + alpha_curved * m_b
+        p = (1 - alpha_curved) * p_a + alpha_curved * p_b
+        t = (1 - alpha_curved) * t_a + alpha_curved * t_b
+        
+        return m, p, t
+    
     def create_smooth_interpolator(self, control_values: List[float], control_positions: List[float], 
                                    kind: str = 'cubic') -> interpolate.interp1d:
         """
@@ -524,7 +560,8 @@ class WingGenerator:
                                   n_blend_sections: int = 6,
                                   n_profile_points: int = 50,
                                   envelope_offset: float = 0.0,
-                                  n_tip_fillet_sections: int = 5) -> trimesh.Trimesh:
+                                  n_tip_fillet_sections: int = 5,
+                                  root_fillet_scale: float = 3.5) -> trimesh.Trimesh:
         """
         Generate a complete wing mesh from parameter dictionary.
         
@@ -541,6 +578,10 @@ class WingGenerator:
                            TIP_FILLET_SIZE_REDUCTION constant (default: 0.08, creating 92% final size).
                            The extension distance is controlled by TIP_FILLET_EXTENSION_FACTOR constant
                            (default: 0.045, extending 4.5% of tip chord).
+            root_fillet_scale: Scale factor for root section thickness to create a fillet at the
+                           hub intersection (default: 3.5). The root NACA thickness is multiplied
+                           by this factor, creating a larger profile that acts as a fillet. Typical
+                           values: 2.5 to 4.5 for structural reinforcement at the root.
             
         Returns:
             Trimesh object of the wing
@@ -551,6 +592,67 @@ class WingGenerator:
         naca_codes = [params[f'naca_{i}'] for i in range(n_sections)]
         twist_angles = [params[f'twist_{i}'] for i in range(n_sections)]
         chord_lengths = [params[f'chord_{i}'] for i in range(n_sections)]
+        
+        # Apply root fillet scale to the root NACA code
+        # Parse the root NACA code and scale its thickness
+        root_m, root_p, root_t = self.parse_naca4(naca_codes[0])
+        root_t_scaled = root_t * root_fillet_scale
+        
+        # Clamp to valid range and track if clamping occurred
+        thickness_clamped = False
+        if root_t_scaled > MAX_NACA_THICKNESS:
+            root_t_scaled = MAX_NACA_THICKNESS
+            thickness_clamped = True
+        
+        # Reconstruct the NACA code for the enlarged root
+        # Only scale thickness, not camber - camber defines the shape, thickness provides structural strength
+        # Use round() instead of int() to avoid precision loss
+        # Clamp all values to valid NACA 4-digit ranges
+        # For NACA 4-digit codes: MPTT where M and P are single digits (0-9), TT is two digits (01-99)
+        # root_m is already a fraction (e.g., 0.06 for 6%), so multiplying by 100 gives the percentage
+        m_digit = max(0, min(9, round(root_m * 100)))
+        p_digit = max(0, min(9, round(root_p * 10)))
+        t_digits = max(1, min(99, round(root_t_scaled * 100)))
+        enlarged_root_code = f"{m_digit}{p_digit}{t_digits:02d}"
+        
+        # Warn if clamping occurred (indicates fillet scale may be inappropriate)
+        if thickness_clamped:
+            warnings.warn(
+                f"Root fillet scale {root_fillet_scale} caused thickness to exceed maximum "
+                f"({root_t * 100:.1f}% * {root_fillet_scale} = {root_t * root_fillet_scale * 100:.1f}%, "
+                f"clamped to {MAX_NACA_THICKNESS * 100:.0f}%). Consider using a smaller scale factor.",
+                UserWarning
+            )
+        
+        # Replace the root NACA code with the enlarged version
+        naca_codes_modified = [enlarged_root_code] + naca_codes[1:]
+        
+        # Scale the root chord length by 10% of the scaling strength
+        # e.g., if root_fillet_scale=8, enlarge root chord by 80% (0.8x)
+        root_chord_scale = 1.0 + (root_fillet_scale - 1.0) * 0.1
+        root_chord_scaled = chord_lengths[0] * root_chord_scale
+        
+        # Calculate maximum allowable chord length based on hub geometry
+        max_chord_allowance = 1.7 * self.HUB_RADIUS
+        
+        # Clamp root chord to max allowance and track if clamping occurred
+        chord_clamped = False
+        if root_chord_scaled > max_chord_allowance:
+            root_chord_scaled = max_chord_allowance
+            chord_clamped = True
+        
+        # Warn if chord clamping occurred
+        if chord_clamped:
+            warnings.warn(
+                f"Root fillet scale {root_fillet_scale} caused root chord to exceed maximum allowable "
+                f"({chord_lengths[0] * 1000:.3f}mm * {root_chord_scale:.2f} = {root_chord_scaled * 1000:.3f}mm, "
+                f"clamped to {max_chord_allowance * 1000:.3f}mm to fit within hub). "
+                f"Consider using a smaller scale factor.",
+                UserWarning
+            )
+        
+        # Replace the root chord with the scaled version
+        chord_lengths_modified = [root_chord_scaled] + chord_lengths[1:]
         
         # Account for Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
         # The overall_length parameter represents the distance from rotor center to wing tip,
@@ -569,7 +671,7 @@ class WingGenerator:
         
         # Create smooth interpolators for chord and twist
         # This treats the specified values as control points for smooth curves
-        chord_interpolator = self.create_smooth_interpolator(chord_lengths, section_positions, kind='cubic')
+        chord_interpolator = self.create_smooth_interpolator(chord_lengths_modified, section_positions, kind='cubic')
         twist_interpolator = self.create_smooth_interpolator(twist_angles, section_positions, kind='cubic')
         
         # Create all sections (defined + blended) with smooth interpolation
@@ -582,8 +684,12 @@ class WingGenerator:
             
             # Add blend section positions between this and next section
             if i < n_sections - 1:
-                for k in range(1, n_blend_sections + 1):
-                    alpha = k / float(n_blend_sections + 1)
+                n_blend_sections_in_use = n_blend_sections
+                # If it's the root, since we have a fillet there, blend more
+                if i == 0:
+                    n_blend_sections_in_use = n_blend_sections * ROOT_BLEND_MORE_MULTIPLIER
+                for k in range(1, n_blend_sections_in_use + 1):
+                    alpha = k / float(n_blend_sections_in_use + 1)
                     z_pos = (1 - alpha) * section_positions[i] + alpha * section_positions[i + 1]
                     all_positions.append(z_pos)
         
@@ -592,7 +698,7 @@ class WingGenerator:
         for i in range(n_sections):
             # Generate the defined section
             z_pos = all_positions[section_idx]
-            m, p, t = self.parse_naca4(naca_codes[i])
+            m, p, t = self.parse_naca4(naca_codes_modified[i])
             profile = self.generate_naca4_profile(m, p, t, n_profile_points)
             
             # Apply envelope offset (offset_profile handles offset <= 0 case)
@@ -610,12 +716,28 @@ class WingGenerator:
             
             # Add blend sections between this and next section
             if i < n_sections - 1:
-                for k in range(1, n_blend_sections + 1):
+                n_blend_sections_in_use = n_blend_sections
+                # If it's the root, since we have a fillet there, blend more
+                if i == 0:
+                    n_blend_sections_in_use = n_blend_sections * ROOT_BLEND_MORE_MULTIPLIER
+
+                for k in range(1, n_blend_sections_in_use + 1):
                     z_pos = all_positions[section_idx]
-                    alpha = k / (n_blend_sections + 1)
+                    alpha = k / (n_blend_sections_in_use + 1)
                     
-                    # Blend NACA parameters
-                    m, p, t = self.blend_naca_codes(naca_codes[i], naca_codes[i + 1], alpha)
+                    # Use custom blend for root-to-second section transition (i == 0)
+                    # Regular blend for all other sections
+                    if i == 0:
+                        # Custom interpolation that favors the second section
+                        m, p, t = self.blend_naca_codes_root_fillet(
+                            naca_codes_modified[i], naca_codes_modified[i + 1], alpha
+                        )
+                    else:
+                        # Regular linear blend
+                        m, p, t = self.blend_naca_codes(
+                            naca_codes_modified[i], naca_codes_modified[i + 1], alpha
+                        )
+                    
                     profile = self.generate_naca4_profile(m, p, t, n_profile_points)
                     
                     # Apply envelope offset (offset_profile handles offset <= 0 case)
@@ -735,10 +857,13 @@ class WingGenerator:
         Returns:
             Trimesh object representing the hub cylinder
         """
-        # Create cylinder along Z axis (default)
+        # Create high-resolution cylinder along Z axis
+        # Use sections=48 for smooth mesh that works well with smoothing algorithms
+        # (Higher values like 64 cause Boolean operation failures with small holes)
         cylinder = trimesh.creation.cylinder(
             radius=self.HUB_RADIUS,
-            height=self.HUB_HEIGHT
+            height=self.HUB_HEIGHT,
+            sections=48
         )
         
         # Rotate to align along Y axis (rotate 90 degrees around X axis)
@@ -758,12 +883,15 @@ class WingGenerator:
         Returns:
             Trimesh object representing the hole cylinder
         """
-        # Create cylinder along Z axis (default) with slightly larger height
+        # Create high-resolution cylinder along Z axis with slightly larger height
         # to ensure it fully penetrates the hub (1.5x height provides clearance)
+        # Use sections=48 to match hub resolution for clean Boolean operations
+        # (Higher values like 64 cause the small hole cylinder to not be a valid volume)
         HOLE_CLEARANCE_FACTOR = 1.5
         cylinder = trimesh.creation.cylinder(
             radius=self.HOLE_RADIUS,
-            height=self.HUB_HEIGHT * HOLE_CLEARANCE_FACTOR
+            height=self.HUB_HEIGHT * HOLE_CLEARANCE_FACTOR,
+            sections=48
         )
         
         # Rotate to align along Y axis (rotate 90 degrees around X axis)
@@ -780,6 +908,27 @@ class WingGenerator:
         trimesh.repair.fix_normals(mesh, True)
         # trimesh.repair.fix_inversion(mesh, True)
         return mesh
+    
+    def smooth_mesh(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+        """
+        Apply smoothing to the entire mesh using Taubin smoothing filter.
+        
+        Args:
+            mesh: The mesh to smooth
+        
+        Returns:
+            Smoothed mesh
+        """
+        # Apply Taubin smoothing to the entire mesh
+        # Taubin smoothing is a good choice because it preserves volume and shape better
+        # than simple Laplacian smoothing
+        smoothed_mesh = trimesh.smoothing.filter_taubin(
+            mesh, 
+            lamb=0.5,  # Smoothing factor
+            iterations=1000
+        )
+        
+        return smoothed_mesh
     
     def create_clockwise_version(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         """
@@ -815,7 +964,8 @@ class WingGenerator:
                                 n_blend_sections: int = 6,
                                 n_profile_points: int = 50,
                                 envelope_offset: float = 0.0,
-                                n_tip_fillet_sections: int = 5) -> trimesh.Trimesh:
+                                n_tip_fillet_sections: int = 5,
+                                root_fillet_scale: float = 3.5) -> trimesh.Trimesh:
         """
         Generate a complete wing design with multiple wings arranged circularly
         and a central hub with a drilled hole.
@@ -831,13 +981,17 @@ class WingGenerator:
                            a smooth rounded tip edge. The size reduction is controlled by the
                            TIP_FILLET_SIZE_REDUCTION constant (default: 0.08). The extension distance
                            is controlled by TIP_FILLET_EXTENSION_FACTOR constant (default: 0.045).
+            root_fillet_scale: Scale factor for root section thickness to create a fillet at the
+                           hub intersection (default: 3.5). The root NACA thickness is multiplied
+                           by this factor, creating a larger profile that acts as a fillet.
             
         Returns:
             Combined mesh of all wings merged with the hub
         """
         # Generate the base wing
         base_wing = self.generate_wing_from_params(params, n_blend_sections, n_profile_points, 
-                                                   envelope_offset, n_tip_fillet_sections)
+                                                   envelope_offset, n_tip_fillet_sections,
+                                                   root_fillet_scale)
         
         # Fix normals on base wing to ensure they point outward
         # self.fix_normals_outward(base_wing)
@@ -864,17 +1018,11 @@ class WingGenerator:
             rotated_wing = self.revolve_wing(base_wing, angle)
             wing_meshes.append(rotated_wing)
         
-        # Create hub cylinder
-        hub = self.create_hub_cylinder()
+        # Load hub with hole from external STL file
+        hub_with_hole = trimesh.load('rotor_hub.stl')
+        hub_with_hole.apply_scale(1. / 1000.0)  # Convert from mm to meters 
         
-        # Create hole cylinder
-        hole = self.create_hole_cylinder()
-        
-        # Drill hole through hub (Boolean difference)
-        # This works because both hub and hole are watertight solids
-        hub_with_hole = trimesh.boolean.difference([hub, hole])
-        
-        # Fix normals on the result of Boolean operation
+        # Fix normals on the loaded hub mesh
         self.fix_normals_outward(hub_with_hole)
         
         # Attempt Boolean union to merge hub with wings
@@ -970,6 +1118,14 @@ def main():
                             'creating a smooth rounded tip edge. Size reduction controlled by '
                             'TIP_FILLET_SIZE_REDUCTION (default: 0.08, 92%% final size). Extension '
                             'controlled by TIP_FILLET_EXTENSION_FACTOR (default: 0.045, 4.5%% of chord).')
+    parser.add_argument('--root-fillet-scale', type=float, default=7.0,
+                       help='Scale factor for root section thickness to create a fillet at the '
+                            'hub intersection (default: 7). The root NACA thickness is multiplied '
+                            'by this factor, creating a larger profile that acts as a fillet for '
+                            'structural integrity. Typical values: 2.5 to 10.')
+    parser.add_argument('--smooth', action='store_true', default=False,
+                       help='Apply Taubin smoothing to the mesh. This helps create smoother fillets '
+                            'and removes sharp edges. Default is False (no smoothing).')
     
     args = parser.parse_args()
     
@@ -983,6 +1139,8 @@ def main():
     print(f"  Number of sections: {params['n_sections']}")
     print(f"  Envelope offset: {args.envelope_offset:.4f} (as fraction of chord)")
     print(f"  Tip fillet sections: {args.tip_fillet_sections}")
+    print(f"  Root fillet scale: {args.root_fillet_scale:.2f}")
+    print(f"  Mesh smoothing: {'enabled' if args.smooth else 'disabled'}")
     
     # Generate wing
     print("Generating wing geometry...")
@@ -992,10 +1150,17 @@ def main():
         n_blend_sections=args.blend_sections,
         n_profile_points=args.profile_points,
         envelope_offset=args.envelope_offset,
-        n_tip_fillet_sections=args.tip_fillet_sections
+        n_tip_fillet_sections=args.tip_fillet_sections,
+        root_fillet_scale=args.root_fillet_scale
     )
     
     print(f"Generated mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
+    
+    # Apply smoothing if requested
+    if args.smooth:
+        print("Applying mesh smoothing...")
+        wing_mesh = generator.smooth_mesh(wing_mesh)
+        print(f"Smoothed mesh: {len(wing_mesh.vertices)} vertices, {len(wing_mesh.faces)} faces")
     
     # Export counterclockwise version to STL
     # Scale coordinates from meters to millimeters (×1000) for output
