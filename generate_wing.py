@@ -33,7 +33,7 @@ TIP_FILLET_REDUCTION_EXPONENT = 2.  # Power curve exponent for smooth tapering (
 # Root fillet constants
 ROOT_FILLET_BLEND_EXPONENT = 2.5  # Power curve exponent for root-to-second section blending (higher = faster transition near root)
 MAX_NACA_THICKNESS = 0.99  # Maximum valid thickness for NACA airfoils (99% of chord)
-MAX_NACA_CAMBER = 0.09  # Maximum valid camber for NACA airfoils (9% of chord)
+MAX_NACA_CAMBER = 0.09  # Maximum valid camber for NACA airfoils (9% of chord) - Note: NACA 4-digit codes use single digits (0-9) for camber
 
 class WingGenerator:
     """
@@ -605,7 +605,9 @@ class WingGenerator:
         # Reconstruct the NACA code for the enlarged root
         # Only scale thickness, not camber - camber defines the shape, thickness provides structural strength
         # Use round() instead of int() to avoid precision loss
-        # Clamp all values to valid NACA 4-digit ranges (0-9 for first two digits, 01-99 for last two)
+        # Clamp all values to valid NACA 4-digit ranges
+        # For NACA 4-digit codes: MPTT where M and P are single digits (0-9), TT is two digits (01-99)
+        # root_m is already a fraction (e.g., 0.06 for 6%), so multiplying by 100 gives the percentage
         m_digit = max(0, min(9, round(root_m * 100)))
         p_digit = max(0, min(9, round(root_p * 10)))
         t_digits = max(1, min(99, round(root_t_scaled * 100)))
