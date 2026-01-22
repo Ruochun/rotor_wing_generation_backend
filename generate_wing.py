@@ -582,7 +582,7 @@ class WingGenerator:
                            hub intersection (default: 3.5). The root NACA thickness is multiplied
                            by this factor, creating a larger profile that acts as a fillet.
                            Note: This parameter only affects thickness, NOT chord length. The root
-                           chord is always fixed at ROOT_CHORD_LENGTH (1.7 * HUB_RADIUS).
+                           chord is always fixed at ROOT_CHORD_LENGTH (1.6 * HUB_RADIUS).
                            Typical values: 2.5 to 10 for structural reinforcement at the root.
             
         Returns:
@@ -631,7 +631,7 @@ class WingGenerator:
         
         # Root chord length is not scaled by root_fillet_scale
         # It remains at the fixed value defined in the CSV parameters (which should be
-        # ROOT_CHORD_LENGTH = 1.7 * HUB_RADIUS from generate_params.py)
+        # ROOT_CHORD_LENGTH = 1.6 * HUB_RADIUS from generate_params.py)
         # Only the thickness is scaled for structural reinforcement
         chord_lengths_modified = chord_lengths
         
@@ -966,7 +966,7 @@ class WingGenerator:
                            hub intersection (default: 3.5). The root NACA thickness is multiplied
                            by this factor, creating a larger profile that acts as a fillet.
                            Note: This parameter only affects thickness, NOT chord length. The root
-                           chord is always fixed at ROOT_CHORD_LENGTH (1.7 * HUB_RADIUS).
+                           chord is always fixed at ROOT_CHORD_LENGTH (1.6 * HUB_RADIUS).
             
         Returns:
             Combined mesh of all wings merged with the hub
