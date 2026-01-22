@@ -176,6 +176,70 @@ python generate_wing.py sample_params.csv --output rotors.stl --smooth
 python generate_wing.py sample_params.csv --output rotors.stl --root-fillet-scale 6.0 --tip-fillet-sections 8 --smooth
 ```
 
+### `generate_wing_brep.py`
+
+**NEW:** B-Rep-based wing generation system that creates parametric CAD models in addition to mesh files.
+
+Generates 3D wing geometry from CSV parameters using B-Rep (Boundary Representation) CAD operations. Unlike `generate_wing.py` which directly creates mesh models, this script builds true CAD models using NURBS surfaces that can be edited in CAD software. It outputs both:
+- **B-Rep model** (STEP format) - fully parametric solid model
+- **Mesh model** (STL format) - triangulated mesh for 3D printing
+
+**Key Differences from `generate_wing.py`:**
+- Uses build123d (OpenCascade) for B-Rep CAD operations instead of direct mesh generation
+- Creates hub with hole using CAD primitives (cylinder with boolean subtraction) instead of loading pre-made STL file
+- Outputs editable STEP file in addition to STL mesh
+- Slower but produces true solid models suitable for CAD editing
+
+**Note:** All internal calculations use SI units (meters), but exported files are automatically scaled to millimeters (×1000) for compatibility with CAD and 3D printing software.
+
+**Usage:**
+
+```bash
+python generate_wing_brep.py input.csv --output rotor_brep [options]
+```
+
+**Options:**
+
+- `--row`: Row index to use from CSV (default: 0)
+- `--output`: Output file base name (default: wing_brep). Generates `<name>.step` and `<name>.stl`
+- `--blend-sections`: Number of blend sections between defined stations (default: 6). 
+  Note: More sections increase Boolean operation time significantly
+- `--profile-points`: Number of points per airfoil side (default: 50)
+- `--envelope-offset`: Envelope offset as fraction of chord (default: 0.03).
+  Note: Currently not implemented for B-Rep version
+- `--tip-fillet-sections`: Number of additional sections at the wing tip for filleting (default: 5)
+- `--root-fillet-scale`: Scale factor for root section thickness to create a fillet at the
+  hub intersection (default: 7)
+
+**Output:**
+
+The script generates **two files**:
+- `<name>.step` - B-Rep solid model in STEP format (editable in CAD software like FreeCAD, Fusion 360, etc.)
+- `<name>.stl` - Triangulated mesh for 3D printing
+
+**Units:** All files are exported in millimeters for compatibility with CAD and 3D printing software.
+
+**Performance Note:** Boolean union operations with complex geometry (many blend sections) can be slow. For faster generation, reduce `--blend-sections` parameter. Recommended values:
+- Quick preview: `--blend-sections 0` (control sections only)
+- Good balance: `--blend-sections 2`
+- High quality: `--blend-sections 4-6` (may take several minutes)
+
+**Examples:**
+
+```bash
+# Generate B-Rep model with default settings
+python generate_wing_brep.py sample_params.csv --output rotor_brep
+
+# Quick generation with fewer blend sections
+python generate_wing_brep.py sample_params.csv --output rotor_brep --blend-sections 2 --tip-fillet-sections 3
+
+# High quality generation (slower)
+python generate_wing_brep.py sample_params.csv --output rotor_brep --blend-sections 4 --tip-fillet-sections 5
+
+# Control sections only (fastest, less smooth)
+python generate_wing_brep.py sample_params.csv --output rotor_brep --blend-sections 0 --tip-fillet-sections 0
+```
+
 ### `analysis.py`
 
 Analyzes wing designs using Blade Element Momentum Theory (BEMT) and computes aerodynamic performance characteristics including thrust, power, and torque.
@@ -248,9 +312,40 @@ python generate_wing.py custom_params.csv --output custom_rotors.stl
 # Optional: Customize envelope offset and number of tip fillet sections
 python generate_wing.py custom_params.csv --output custom_rotors.stl --envelope-offset 0.05 --tip-fillet-sections 8
 
+# Alternative: Generate B-Rep CAD model (STEP + STL)
+# Use this if you want to edit the model in CAD software
+python generate_wing_brep.py custom_params.csv --output custom_rotor_brep --blend-sections 2
+
 # Step 3: Analyze wing performance
 python analysis.py custom_params.csv custom_analysis.csv --rpm 3000
 ```
+
+## B-Rep vs Mesh Generation
+
+This project provides two approaches for wing generation:
+
+### Mesh-Based (`generate_wing.py`)
+- **Pros:**
+  - Fast generation (seconds)
+  - Includes envelope offset feature for 3D printing
+  - Supports mesh smoothing
+  - Creates both CCW and CW versions automatically
+- **Cons:**
+  - Output is mesh only (STL) - not easily editable
+  - Hub loaded from pre-made STL file
+- **Use when:** You need quick generation for 3D printing or visualization
+
+### B-Rep-Based (`generate_wing_brep.py`)
+- **Pros:**
+  - Creates true CAD solid models (STEP format)
+  - Editable in CAD software (FreeCAD, Fusion 360, SolidWorks, etc.)
+  - Hub created parametrically using primitives
+  - Exports both B-Rep (STEP) and mesh (STL)
+- **Cons:**
+  - Slower generation (minutes for complex geometry)
+  - Boolean operations scale poorly with blend sections
+  - Envelope offset not yet implemented
+- **Use when:** You need to edit the design in CAD software or want a true solid model
 
 ## Parameter Translation
 
@@ -274,14 +369,20 @@ When generating multiple wings (n_wings > 1), the script automatically shifts ea
 
 ## Requirements
 
+**Core dependencies (for all scripts):**
 - Python 3.7+
 - numpy
 - scipy
-- trimesh
-- manifold3d (required for Boolean operations in hub generation)
-- networkx (optional, for mesh repair operations)
 
-Install dependencies:
+**For mesh-based generation (`generate_wing.py`):**
+- trimesh
+- manifold3d (required for Boolean operations)
+- networkx (optional, for mesh repair)
+
+**For B-Rep CAD generation (`generate_wing_brep.py`):**
+- build123d (provides OpenCascade bindings for B-Rep operations)
+
+Install all dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -290,7 +391,11 @@ pip install -r requirements.txt
 Or install manually:
 
 ```bash
+# For mesh-based generation
 pip install numpy scipy trimesh manifold3d networkx
+
+# For B-Rep CAD generation (includes all above)
+pip install numpy scipy trimesh manifold3d networkx build123d
 ```
 
 ## Distribution as Executables
