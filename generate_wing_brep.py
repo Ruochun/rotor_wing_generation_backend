@@ -9,16 +9,16 @@ The system uses build123d (a Python wrapper around OpenCascade) to create true C
 that can be further edited in CAD software, unlike the mesh-only approach in generate_wing.py.
 """
 
-import csv
+import argparse
 import math
-import os
-import warnings
 from typing import List, Tuple, Dict, Optional
 
 import numpy as np
+from scipy import interpolate
 from build123d import *
+from build123d import export_step, export_stl, Unit
 
-# Import constants from the original script
+# Import constants and utilities from the original script
 from generate_wing import (
     Z_OFFSET_OF_BLADES_FOR_BOOLEAN,
     TIP_FILLET_SIZE_REDUCTION,
@@ -228,8 +228,6 @@ class BRepWingGenerator:
         Returns:
             Solid object representing the wing
         """
-        from scipy import interpolate
-        
         # Extract parameters
         overall_length = params['overall_length']
         n_sections = params['n_sections']
@@ -431,8 +429,6 @@ class BRepWingGenerator:
 
 def main():
     """Main function for B-Rep wing generation."""
-    import argparse
-    
     parser = argparse.ArgumentParser(
         description='Generate wing geometry from CSV parameters using B-Rep CAD operations',
         formatter_class=argparse.RawDescriptionHelpFormatter
@@ -482,7 +478,6 @@ def main():
     # Export B-Rep as STEP file (in millimeters)
     step_file = f"{args.output}.step"
     print(f"Exporting B-Rep to {step_file}...")
-    from build123d import export_step, export_stl, Unit, Location
     
     # Scale solid from meters to millimeters for export
     rotor_solid_mm = rotor_solid.scale(1000.0)
