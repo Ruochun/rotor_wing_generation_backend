@@ -16,7 +16,13 @@ from typing import List
 MAX_POSITION_DIGIT = 9  # Maximum value for NACA position digit
 
 # Chord length constants
-ROOT_CHORD_LENGTH = 0.0025  # Fixed chord length at root for rotor hub union
+# ROOT_CHORD_LENGTH must match the calculation used in generate_wing.py
+# Formula: ROOT_CHORD_LENGTH = 1.55 * WingGenerator.HUB_RADIUS
+# Where HUB_RADIUS = 0.00435 / 2.0 = 0.002175 (defined in WingGenerator class)
+# Therefore: ROOT_CHORD_LENGTH = 1.55 * 0.002175 = 0.00337125
+# This ensures the root chord fits within the hub geometry.
+# WARNING: If HUB_RADIUS changes in generate_wing.py, this value MUST be updated accordingly!
+ROOT_CHORD_LENGTH = 0.00337125  # Fixed chord length at root for rotor hub union (1.55 * HUB_RADIUS)
 
 
 def translate_to_naca_code(max_thickness: float, max_camber: float, max_camber_location: float) -> str:

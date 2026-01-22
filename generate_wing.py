@@ -580,8 +580,10 @@ class WingGenerator:
                            (default: 0.045, extending 4.5% of tip chord).
             root_fillet_scale: Scale factor for root section thickness to create a fillet at the
                            hub intersection (default: 3.5). The root NACA thickness is multiplied
-                           by this factor, creating a larger profile that acts as a fillet. Typical
-                           values: 2.5 to 4.5 for structural reinforcement at the root.
+                           by this factor, creating a larger profile that acts as a fillet.
+                           Note: This parameter only affects thickness, NOT chord length. The root
+                           chord is always fixed at ROOT_CHORD_LENGTH (1.55 * HUB_RADIUS).
+                           Typical values: 2.5 to 10 for structural reinforcement at the root.
             
         Returns:
             Trimesh object of the wing
@@ -627,32 +629,11 @@ class WingGenerator:
         # Replace the root NACA code with the enlarged version
         naca_codes_modified = [enlarged_root_code] + naca_codes[1:]
         
-        # Scale the root chord length by 10% of the scaling strength
-        # e.g., if root_fillet_scale=8, enlarge root chord by 80% (0.8x)
-        root_chord_scale = 1.0 + (root_fillet_scale - 1.0) * 0.1
-        root_chord_scaled = chord_lengths[0] * root_chord_scale
-        
-        # Calculate maximum allowable chord length based on hub geometry
-        max_chord_allowance = 1.7 * self.HUB_RADIUS
-        
-        # Clamp root chord to max allowance and track if clamping occurred
-        chord_clamped = False
-        if root_chord_scaled > max_chord_allowance:
-            root_chord_scaled = max_chord_allowance
-            chord_clamped = True
-        
-        # Warn if chord clamping occurred
-        if chord_clamped:
-            warnings.warn(
-                f"Root fillet scale {root_fillet_scale} caused root chord to exceed maximum allowable "
-                f"({chord_lengths[0] * 1000:.3f}mm * {root_chord_scale:.2f} = {root_chord_scaled * 1000:.3f}mm, "
-                f"clamped to {max_chord_allowance * 1000:.3f}mm to fit within hub). "
-                f"Consider using a smaller scale factor.",
-                UserWarning
-            )
-        
-        # Replace the root chord with the scaled version
-        chord_lengths_modified = [root_chord_scaled] + chord_lengths[1:]
+        # Root chord length is not scaled by root_fillet_scale
+        # It remains at the fixed value defined in the CSV parameters (which should be
+        # ROOT_CHORD_LENGTH = 1.55 * HUB_RADIUS from generate_params.py)
+        # Only the thickness is scaled for structural reinforcement
+        chord_lengths_modified = chord_lengths
         
         # Account for Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
         # The overall_length parameter represents the distance from rotor center to wing tip,
@@ -984,6 +965,8 @@ class WingGenerator:
             root_fillet_scale: Scale factor for root section thickness to create a fillet at the
                            hub intersection (default: 3.5). The root NACA thickness is multiplied
                            by this factor, creating a larger profile that acts as a fillet.
+                           Note: This parameter only affects thickness, NOT chord length. The root
+                           chord is always fixed at ROOT_CHORD_LENGTH (1.55 * HUB_RADIUS).
             
         Returns:
             Combined mesh of all wings merged with the hub
