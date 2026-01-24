@@ -172,8 +172,8 @@ python generate_wing.py sample_params.csv --output rotors.stl --root-fillet-scal
 # Generate wing with mesh smoothing for smoother fillets
 python generate_wing.py sample_params.csv --output rotors.stl --smooth
 
-# Generate wing with all enhancements for optimal 3D printing
-python generate_wing.py sample_params.csv --output rotors.stl --root-fillet-scale 6.0 --tip-fillet-sections 8 --smooth
+# Generate wing with all enhancements for optimal 3D printing (that is, no extra options)
+python generate_wing.py sample_params.csv --output rotors.stl 
 ```
 
 ### `analysis.py`
