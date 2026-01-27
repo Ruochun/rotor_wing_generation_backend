@@ -51,9 +51,9 @@ class WingGenerator:
     
     def __init__(self):
         """Initialize the wing generator."""
-        self.wing_start_location = np.array([0.0, 0.0, Z_OFFSET_OF_BLADES_FOR_BOOLEAN])
+        self.wing_start_location = np.array([0.0, Z_OFFSET_OF_BLADES_FOR_BOOLEAN, 0.0])
         self.revolve_center = np.array([0.0, 0.0, 0.0])
-        self.revolve_axis = np.array([0.0, 1.0, 0.0])
+        self.revolve_axis = np.array([0.0, 0.0, 1.0])
         
     def parse_naca4(self, code: str) -> Tuple[float, float, float]:
         """
@@ -332,7 +332,7 @@ class WingGenerator:
         
         Args:
             profile: Array of shape (N, 2) with normalized (x, y) coordinates
-            z_pos: Spanwise position (along Z axis)
+            z_pos: Spanwise position (along Y axis)
             chord: Chord length at this section
             twist_deg: Twist angle in degrees
             start_location: Starting location (x, y, z) of the wing root
@@ -344,26 +344,26 @@ class WingGenerator:
         # Leading edge (x=0) becomes x=0.25*chord (positive X)
         # Trailing edge (x=1) becomes x=-0.75*chord (negative X)
         x = chord * (0.25 - profile[:, 0])
-        y = chord * profile[:, 1]
-        z = np.full_like(x, z_pos)
+        y = np.full_like(x, z_pos)
+        z = chord * profile[:, 1]
         
         # Create 3D coordinates
         coords = np.column_stack([x, y, z])
         
-        # Apply twist rotation around Z axis at the section location
+        # Apply twist rotation around Y axis at the section location
         twist_rad = math.radians(twist_deg)
         cos_t = math.cos(twist_rad)
         sin_t = math.sin(twist_rad)
         
-        # Rotation matrix for Z axis
+        # Rotation matrix for Y axis
         rot_matrix = np.array([
-            [cos_t, -sin_t, 0],
-            [sin_t, cos_t, 0],
-            [0, 0, 1]
+            [cos_t, 0, sin_t],
+            [0, 1, 0],
+            [-sin_t, 0, cos_t]
         ])
         
         # Rotate around the section center
-        section_center = np.array([0, 0, z_pos])
+        section_center = np.array([0, z_pos, 0])
         coords = (coords - section_center) @ rot_matrix.T + section_center
         
         # Translate to start location
@@ -799,7 +799,7 @@ class WingGenerator:
     
     def revolve_wing(self, wing_mesh: trimesh.Trimesh, angle_deg: float) -> trimesh.Trimesh:
         """
-        Revolve a wing around the Y axis by a specified angle.
+        Revolve a wing around the Z axis by a specified angle.
         
         Args:
             wing_mesh: The wing mesh to revolve
@@ -809,16 +809,16 @@ class WingGenerator:
             Rotated wing mesh
         """
         
-        # Create rotation matrix around Y axis
+        # Create rotation matrix around Z axis
         angle_rad = math.radians(angle_deg)
         cos_a = math.cos(angle_rad)
         sin_a = math.sin(angle_rad)
         
-        # Rotation around Y axis through revolve_center
+        # Rotation around Z axis through revolve_center
         rot_matrix = np.array([
-            [cos_a, 0, sin_a],
-            [0, 1, 0],
-            [-sin_a, 0, cos_a]
+            [cos_a, -sin_a, 0],
+            [sin_a, cos_a, 0],
+            [0, 0, 1]
         ])
         
         # Apply rotation
@@ -833,7 +833,7 @@ class WingGenerator:
     
     def create_hub_cylinder(self) -> trimesh.Trimesh:
         """
-        Create a cylindrical hub centered at the origin along the Y axis.
+        Create a cylindrical hub centered at the origin along the Z axis.
         
         Returns:
             Trimesh object representing the hub cylinder
@@ -847,13 +847,7 @@ class WingGenerator:
             sections=48
         )
         
-        # Rotate to align along Y axis (rotate 90 degrees around X axis)
-        transform = trimesh.transformations.rotation_matrix(
-            angle=np.radians(90),
-            direction=[1, 0, 0],
-            point=[0, 0, 0]
-        )
-        cylinder.apply_transform(transform)
+        # No rotation needed - cylinder is already along Z axis
         
         return cylinder
     
@@ -875,13 +869,7 @@ class WingGenerator:
             sections=48
         )
         
-        # Rotate to align along Y axis (rotate 90 degrees around X axis)
-        transform = trimesh.transformations.rotation_matrix(
-            angle=np.radians(90),
-            direction=[1, 0, 0],
-            point=[0, 0, 0]
-        )
-        cylinder.apply_transform(transform)
+        # No rotation needed - cylinder is already along Z axis
         
         return cylinder
     
@@ -913,11 +901,11 @@ class WingGenerator:
     
     def create_clockwise_version(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         """
-        Create a clockwise version of the wing by mirroring across the XY plane.
+        Create a clockwise version of the wing by mirroring across the XZ plane.
         
         The original design is for counterclockwise rotation (when viewed from above,
-        looking down the Y axis). To create a clockwise version, we mirror the mesh
-        across the XY plane (negate Z coordinates) and flip the face winding order
+        looking down the Z axis). To create a clockwise version, we mirror the mesh
+        across the XZ plane (negate Y coordinates) and flip the face winding order
         to maintain outward-pointing normals.
         
         Args:
@@ -929,11 +917,11 @@ class WingGenerator:
         # Create a copy of the mesh
         mirrored_mesh = mesh.copy()
         
-        # Mirror across XY plane by negating Z coordinates
-        mirrored_mesh.vertices[:, 2] *= -1
+        # Mirror across XZ plane by negating Y coordinates
+        mirrored_mesh.vertices[:, 1] *= -1
         
-        # Flip face winding order to correct normals inverted by Z-coordinate negation
-        # Step 1 (above): Negating Z-coordinates mirrors geometry but inverts normals
+        # Flip face winding order to correct normals inverted by Y-coordinate negation
+        # Step 1 (above): Negating Y-coordinates mirrors geometry but inverts normals
         # Step 2 (here): Reversing vertex order in each face flips normals back outward
         # np.fliplr() reverses each row (face) in the faces array from [v0, v1, v2]
         # to [v2, v1, v0], which reverses the winding order and thus the normal direction.
