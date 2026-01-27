@@ -23,7 +23,7 @@ import numpy as np
 import trimesh
 from scipy import interpolate
 
-Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.001
+Y_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.001
 
 # Tip fillet constants
 TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value) × original (default: 92% of original)
@@ -51,7 +51,7 @@ class WingGenerator:
     
     def __init__(self):
         """Initialize the wing generator."""
-        self.wing_start_location = np.array([0.0, Z_OFFSET_OF_BLADES_FOR_BOOLEAN, 0.0])
+        self.wing_start_location = np.array([0.0, Y_OFFSET_OF_BLADES_FOR_BOOLEAN, 0.0])
         self.revolve_center = np.array([0.0, 0.0, 0.0])
         self.revolve_axis = np.array([0.0, 0.0, 1.0])
         
@@ -635,17 +635,17 @@ class WingGenerator:
         # Only the thickness is scaled for structural reinforcement
         chord_lengths_modified = chord_lengths
         
-        # Account for Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
+        # Account for Y_OFFSET_OF_BLADES_FOR_BOOLEAN:
         # The overall_length parameter represents the distance from rotor center to wing tip,
-        # but we offset the wing start by Z_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
+        # but we offset the wing start by Y_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
         # Therefore, the actual wing length should be reduced by this offset.
-        if overall_length <= Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
+        if overall_length <= Y_OFFSET_OF_BLADES_FOR_BOOLEAN:
             raise ValueError(
                 f"overall_length ({overall_length}) must be greater than "
-                f"Z_OFFSET_OF_BLADES_FOR_BOOLEAN ({Z_OFFSET_OF_BLADES_FOR_BOOLEAN})"
+                f"Y_OFFSET_OF_BLADES_FOR_BOOLEAN ({Y_OFFSET_OF_BLADES_FOR_BOOLEAN})"
             )
         
-        actual_wing_length = overall_length - Z_OFFSET_OF_BLADES_FOR_BOOLEAN
+        actual_wing_length = overall_length - Y_OFFSET_OF_BLADES_FOR_BOOLEAN
         
         # Generate section positions
         section_positions = np.linspace(0, actual_wing_length, n_sections)
