@@ -355,11 +355,12 @@ class WingGenerator:
         cos_t = math.cos(twist_rad)
         sin_t = math.sin(twist_rad)
         
-        # Rotation matrix for Y axis
+        # Rotation matrix for Y axis (with corrected chirality)
+        # Positive twist pitches leading edge upward (+Z direction)
         rot_matrix = np.array([
-            [cos_t, 0, sin_t],
+            [cos_t, 0, -sin_t],
             [0, 1, 0],
-            [-sin_t, 0, cos_t]
+            [sin_t, 0, cos_t]
         ])
         
         # Rotate around the section center
