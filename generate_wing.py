@@ -323,7 +323,7 @@ class WingGenerator:
         return profile
     
     def transform_profile_to_section(self, profile: np.ndarray, 
-                                     z_pos: float, 
+                                     spanwise_pos: float, 
                                      chord: float, 
                                      twist_deg: float,
                                      start_location: np.ndarray) -> np.ndarray:
@@ -332,7 +332,7 @@ class WingGenerator:
         
         Args:
             profile: Array of shape (N, 2) with normalized (x, y) coordinates
-            z_pos: Spanwise position (along Y axis)
+            spanwise_pos: Spanwise position (along Y axis)
             chord: Chord length at this section
             twist_deg: Twist angle in degrees
             start_location: Starting location (x, y, z) of the wing root
@@ -344,7 +344,7 @@ class WingGenerator:
         # Leading edge (x=0) becomes x=0.25*chord (positive X)
         # Trailing edge (x=1) becomes x=-0.75*chord (negative X)
         x = chord * (0.25 - profile[:, 0])
-        y = np.full_like(x, z_pos)
+        y = np.full_like(x, spanwise_pos)
         z = chord * profile[:, 1]
         
         # Create 3D coordinates
@@ -363,7 +363,7 @@ class WingGenerator:
         ])
         
         # Rotate around the section center
-        section_center = np.array([0, z_pos, 0])
+        section_center = np.array([0, spanwise_pos, 0])
         coords = (coords - section_center) @ rot_matrix.T + section_center
         
         # Translate to start location
@@ -671,14 +671,14 @@ class WingGenerator:
                     n_blend_sections_in_use = n_blend_sections * ROOT_BLEND_MORE_MULTIPLIER
                 for k in range(1, n_blend_sections_in_use + 1):
                     alpha = k / float(n_blend_sections_in_use + 1)
-                    z_pos = (1 - alpha) * section_positions[i] + alpha * section_positions[i + 1]
-                    all_positions.append(z_pos)
+                    spanwise_pos = (1 - alpha) * section_positions[i] + alpha * section_positions[i + 1]
+                    all_positions.append(spanwise_pos)
         
         # Generate all sections with smooth parameter interpolation
         section_idx = 0
         for i in range(n_sections):
             # Generate the defined section
-            z_pos = all_positions[section_idx]
+            spanwise_pos = all_positions[section_idx]
             m, p, t = self.parse_naca4(naca_codes_modified[i])
             profile = self.generate_naca4_profile(m, p, t, n_profile_points)
             
@@ -686,11 +686,11 @@ class WingGenerator:
             profile = self.offset_profile(profile, envelope_offset)
             
             # Use smoothly interpolated chord and twist
-            chord = float(chord_interpolator(z_pos))
-            twist = float(twist_interpolator(z_pos))
+            chord = float(chord_interpolator(spanwise_pos))
+            twist = float(twist_interpolator(spanwise_pos))
             
             section = self.transform_profile_to_section(
-                profile, z_pos, chord, twist, self.wing_start_location
+                profile, spanwise_pos, chord, twist, self.wing_start_location
             )
             all_sections.append(section)
             section_idx += 1
@@ -703,7 +703,7 @@ class WingGenerator:
                     n_blend_sections_in_use = n_blend_sections * ROOT_BLEND_MORE_MULTIPLIER
 
                 for k in range(1, n_blend_sections_in_use + 1):
-                    z_pos = all_positions[section_idx]
+                    spanwise_pos = all_positions[section_idx]
                     alpha = k / (n_blend_sections_in_use + 1)
                     
                     # Use custom blend for root-to-second section transition (i == 0)
@@ -725,11 +725,11 @@ class WingGenerator:
                     profile = self.offset_profile(profile, envelope_offset)
                     
                     # Use smoothly interpolated chord and twist
-                    chord = float(chord_interpolator(z_pos))
-                    twist = float(twist_interpolator(z_pos))
+                    chord = float(chord_interpolator(spanwise_pos))
+                    twist = float(twist_interpolator(spanwise_pos))
                     
                     section = self.transform_profile_to_section(
-                        profile, z_pos, chord, twist, self.wing_start_location
+                        profile, spanwise_pos, chord, twist, self.wing_start_location
                     )
                     all_sections.append(section)
                     section_idx += 1
@@ -740,7 +740,7 @@ class WingGenerator:
             last_m, last_p, last_t = self.parse_naca4(naca_codes[-1])
             last_chord = chord_lengths[-1]
             last_twist = twist_angles[-1]
-            last_z_pos = section_positions[-1]
+            last_spanwise_pos = section_positions[-1]
             
             # Calculate the final size reduction based on TIP_FILLET_SIZE_REDUCTION constant
             # If TIP_FILLET_SIZE_REDUCTION is 0.08, the final fillet section should be 92% (1 - 0.08) of original
@@ -757,7 +757,7 @@ class WingGenerator:
                 alpha = k / (n_tip_fillet_sections + 1)
                 
                 # Position extends beyond the last section
-                z_pos = last_z_pos + alpha * fillet_extension
+                spanwise_pos = last_spanwise_pos + alpha * fillet_extension
                 
                 # Progressive reduction in chord and thickness
                 # Use a power curve for smooth reduction
@@ -785,7 +785,7 @@ class WingGenerator:
                 fillet_twist = last_twist
                 
                 section = self.transform_profile_to_section(
-                    profile, z_pos, fillet_chord, fillet_twist, self.wing_start_location
+                    profile, spanwise_pos, fillet_chord, fillet_twist, self.wing_start_location
                 )
                 all_sections.append(section)
         
