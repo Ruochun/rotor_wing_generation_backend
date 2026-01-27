@@ -23,7 +23,7 @@ import numpy as np
 import trimesh
 from scipy import interpolate
 
-Z_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.001
+Y_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.001
 
 # Tip fillet constants
 TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value) × original (default: 92% of original)
@@ -51,9 +51,9 @@ class WingGenerator:
     
     def __init__(self):
         """Initialize the wing generator."""
-        self.wing_start_location = np.array([0.0, 0.0, Z_OFFSET_OF_BLADES_FOR_BOOLEAN])
+        self.wing_start_location = np.array([0.0, Y_OFFSET_OF_BLADES_FOR_BOOLEAN, 0.0])
         self.revolve_center = np.array([0.0, 0.0, 0.0])
-        self.revolve_axis = np.array([0.0, 1.0, 0.0])
+        self.revolve_axis = np.array([0.0, 0.0, 1.0])
         
     def parse_naca4(self, code: str) -> Tuple[float, float, float]:
         """
@@ -323,7 +323,7 @@ class WingGenerator:
         return profile
     
     def transform_profile_to_section(self, profile: np.ndarray, 
-                                     z_pos: float, 
+                                     spanwise_pos: float, 
                                      chord: float, 
                                      twist_deg: float,
                                      start_location: np.ndarray) -> np.ndarray:
@@ -332,7 +332,7 @@ class WingGenerator:
         
         Args:
             profile: Array of shape (N, 2) with normalized (x, y) coordinates
-            z_pos: Spanwise position (along Z axis)
+            spanwise_pos: Spanwise position (along Y axis)
             chord: Chord length at this section
             twist_deg: Twist angle in degrees
             start_location: Starting location (x, y, z) of the wing root
@@ -344,26 +344,27 @@ class WingGenerator:
         # Leading edge (x=0) becomes x=0.25*chord (positive X)
         # Trailing edge (x=1) becomes x=-0.75*chord (negative X)
         x = chord * (0.25 - profile[:, 0])
-        y = chord * profile[:, 1]
-        z = np.full_like(x, z_pos)
+        y = np.full_like(x, spanwise_pos)
+        z = chord * profile[:, 1]
         
         # Create 3D coordinates
         coords = np.column_stack([x, y, z])
         
-        # Apply twist rotation around Z axis at the section location
+        # Apply twist rotation around Y axis at the section location
         twist_rad = math.radians(twist_deg)
         cos_t = math.cos(twist_rad)
         sin_t = math.sin(twist_rad)
         
-        # Rotation matrix for Z axis
+        # Rotation matrix for Y axis (with corrected chirality)
+        # Positive twist pitches leading edge upward (+Z direction)
         rot_matrix = np.array([
-            [cos_t, -sin_t, 0],
-            [sin_t, cos_t, 0],
-            [0, 0, 1]
+            [cos_t, 0, -sin_t],
+            [0, 1, 0],
+            [sin_t, 0, cos_t]
         ])
         
         # Rotate around the section center
-        section_center = np.array([0, 0, z_pos])
+        section_center = np.array([0, spanwise_pos, 0])
         coords = (coords - section_center) @ rot_matrix.T + section_center
         
         # Translate to start location
@@ -635,17 +636,17 @@ class WingGenerator:
         # Only the thickness is scaled for structural reinforcement
         chord_lengths_modified = chord_lengths
         
-        # Account for Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
+        # Account for Y_OFFSET_OF_BLADES_FOR_BOOLEAN:
         # The overall_length parameter represents the distance from rotor center to wing tip,
-        # but we offset the wing start by Z_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
+        # but we offset the wing start by Y_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
         # Therefore, the actual wing length should be reduced by this offset.
-        if overall_length <= Z_OFFSET_OF_BLADES_FOR_BOOLEAN:
+        if overall_length <= Y_OFFSET_OF_BLADES_FOR_BOOLEAN:
             raise ValueError(
                 f"overall_length ({overall_length}) must be greater than "
-                f"Z_OFFSET_OF_BLADES_FOR_BOOLEAN ({Z_OFFSET_OF_BLADES_FOR_BOOLEAN})"
+                f"Y_OFFSET_OF_BLADES_FOR_BOOLEAN ({Y_OFFSET_OF_BLADES_FOR_BOOLEAN})"
             )
         
-        actual_wing_length = overall_length - Z_OFFSET_OF_BLADES_FOR_BOOLEAN
+        actual_wing_length = overall_length - Y_OFFSET_OF_BLADES_FOR_BOOLEAN
         
         # Generate section positions
         section_positions = np.linspace(0, actual_wing_length, n_sections)
@@ -671,14 +672,14 @@ class WingGenerator:
                     n_blend_sections_in_use = n_blend_sections * ROOT_BLEND_MORE_MULTIPLIER
                 for k in range(1, n_blend_sections_in_use + 1):
                     alpha = k / float(n_blend_sections_in_use + 1)
-                    z_pos = (1 - alpha) * section_positions[i] + alpha * section_positions[i + 1]
-                    all_positions.append(z_pos)
+                    spanwise_pos = (1 - alpha) * section_positions[i] + alpha * section_positions[i + 1]
+                    all_positions.append(spanwise_pos)
         
         # Generate all sections with smooth parameter interpolation
         section_idx = 0
         for i in range(n_sections):
             # Generate the defined section
-            z_pos = all_positions[section_idx]
+            spanwise_pos = all_positions[section_idx]
             m, p, t = self.parse_naca4(naca_codes_modified[i])
             profile = self.generate_naca4_profile(m, p, t, n_profile_points)
             
@@ -686,11 +687,11 @@ class WingGenerator:
             profile = self.offset_profile(profile, envelope_offset)
             
             # Use smoothly interpolated chord and twist
-            chord = float(chord_interpolator(z_pos))
-            twist = float(twist_interpolator(z_pos))
+            chord = float(chord_interpolator(spanwise_pos))
+            twist = float(twist_interpolator(spanwise_pos))
             
             section = self.transform_profile_to_section(
-                profile, z_pos, chord, twist, self.wing_start_location
+                profile, spanwise_pos, chord, twist, self.wing_start_location
             )
             all_sections.append(section)
             section_idx += 1
@@ -703,7 +704,7 @@ class WingGenerator:
                     n_blend_sections_in_use = n_blend_sections * ROOT_BLEND_MORE_MULTIPLIER
 
                 for k in range(1, n_blend_sections_in_use + 1):
-                    z_pos = all_positions[section_idx]
+                    spanwise_pos = all_positions[section_idx]
                     alpha = k / (n_blend_sections_in_use + 1)
                     
                     # Use custom blend for root-to-second section transition (i == 0)
@@ -725,11 +726,11 @@ class WingGenerator:
                     profile = self.offset_profile(profile, envelope_offset)
                     
                     # Use smoothly interpolated chord and twist
-                    chord = float(chord_interpolator(z_pos))
-                    twist = float(twist_interpolator(z_pos))
+                    chord = float(chord_interpolator(spanwise_pos))
+                    twist = float(twist_interpolator(spanwise_pos))
                     
                     section = self.transform_profile_to_section(
-                        profile, z_pos, chord, twist, self.wing_start_location
+                        profile, spanwise_pos, chord, twist, self.wing_start_location
                     )
                     all_sections.append(section)
                     section_idx += 1
@@ -740,7 +741,7 @@ class WingGenerator:
             last_m, last_p, last_t = self.parse_naca4(naca_codes[-1])
             last_chord = chord_lengths[-1]
             last_twist = twist_angles[-1]
-            last_z_pos = section_positions[-1]
+            last_spanwise_pos = section_positions[-1]
             
             # Calculate the final size reduction based on TIP_FILLET_SIZE_REDUCTION constant
             # If TIP_FILLET_SIZE_REDUCTION is 0.08, the final fillet section should be 92% (1 - 0.08) of original
@@ -757,7 +758,7 @@ class WingGenerator:
                 alpha = k / (n_tip_fillet_sections + 1)
                 
                 # Position extends beyond the last section
-                z_pos = last_z_pos + alpha * fillet_extension
+                spanwise_pos = last_spanwise_pos + alpha * fillet_extension
                 
                 # Progressive reduction in chord and thickness
                 # Use a power curve for smooth reduction
@@ -785,7 +786,7 @@ class WingGenerator:
                 fillet_twist = last_twist
                 
                 section = self.transform_profile_to_section(
-                    profile, z_pos, fillet_chord, fillet_twist, self.wing_start_location
+                    profile, spanwise_pos, fillet_chord, fillet_twist, self.wing_start_location
                 )
                 all_sections.append(section)
         
@@ -799,7 +800,7 @@ class WingGenerator:
     
     def revolve_wing(self, wing_mesh: trimesh.Trimesh, angle_deg: float) -> trimesh.Trimesh:
         """
-        Revolve a wing around the Y axis by a specified angle.
+        Revolve a wing around the Z axis by a specified angle.
         
         Args:
             wing_mesh: The wing mesh to revolve
@@ -809,16 +810,16 @@ class WingGenerator:
             Rotated wing mesh
         """
         
-        # Create rotation matrix around Y axis
+        # Create rotation matrix around Z axis
         angle_rad = math.radians(angle_deg)
         cos_a = math.cos(angle_rad)
         sin_a = math.sin(angle_rad)
         
-        # Rotation around Y axis through revolve_center
+        # Rotation around Z axis through revolve_center
         rot_matrix = np.array([
-            [cos_a, 0, sin_a],
-            [0, 1, 0],
-            [-sin_a, 0, cos_a]
+            [cos_a, -sin_a, 0],
+            [sin_a, cos_a, 0],
+            [0, 0, 1]
         ])
         
         # Apply rotation
@@ -833,7 +834,7 @@ class WingGenerator:
     
     def create_hub_cylinder(self) -> trimesh.Trimesh:
         """
-        Create a cylindrical hub centered at the origin along the Y axis.
+        Create a cylindrical hub centered at the origin along the Z axis.
         
         Returns:
             Trimesh object representing the hub cylinder
@@ -847,13 +848,7 @@ class WingGenerator:
             sections=48
         )
         
-        # Rotate to align along Y axis (rotate 90 degrees around X axis)
-        transform = trimesh.transformations.rotation_matrix(
-            angle=np.radians(90),
-            direction=[1, 0, 0],
-            point=[0, 0, 0]
-        )
-        cylinder.apply_transform(transform)
+        # No rotation needed - cylinder is already along Z axis
         
         return cylinder
     
@@ -875,13 +870,7 @@ class WingGenerator:
             sections=48
         )
         
-        # Rotate to align along Y axis (rotate 90 degrees around X axis)
-        transform = trimesh.transformations.rotation_matrix(
-            angle=np.radians(90),
-            direction=[1, 0, 0],
-            point=[0, 0, 0]
-        )
-        cylinder.apply_transform(transform)
+        # No rotation needed - cylinder is already along Z axis
         
         return cylinder
     
@@ -913,11 +902,11 @@ class WingGenerator:
     
     def create_clockwise_version(self, mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         """
-        Create a clockwise version of the wing by mirroring across the XY plane.
+        Create a clockwise version of the wing by mirroring across the XZ plane.
         
         The original design is for counterclockwise rotation (when viewed from above,
-        looking down the Y axis). To create a clockwise version, we mirror the mesh
-        across the XY plane (negate Z coordinates) and flip the face winding order
+        looking down the Z axis). To create a clockwise version, we mirror the mesh
+        across the XZ plane (negate Y coordinates) and flip the face winding order
         to maintain outward-pointing normals.
         
         Args:
@@ -929,11 +918,11 @@ class WingGenerator:
         # Create a copy of the mesh
         mirrored_mesh = mesh.copy()
         
-        # Mirror across XY plane by negating Z coordinates
-        mirrored_mesh.vertices[:, 2] *= -1
+        # Mirror across XZ plane by negating Y coordinates
+        mirrored_mesh.vertices[:, 1] *= -1
         
-        # Flip face winding order to correct normals inverted by Z-coordinate negation
-        # Step 1 (above): Negating Z-coordinates mirrors geometry but inverts normals
+        # Flip face winding order to correct normals inverted by Y-coordinate negation
+        # Step 1 (above): Negating Y-coordinates mirrors geometry but inverts normals
         # Step 2 (here): Reversing vertex order in each face flips normals back outward
         # np.fliplr() reverses each row (face) in the faces array from [v0, v1, v2]
         # to [v2, v1, v0], which reverses the winding order and thus the normal direction.
