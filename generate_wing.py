@@ -23,8 +23,6 @@ import numpy as np
 import trimesh
 from scipy import interpolate
 
-Y_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.001
-
 # Tip fillet constants
 TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value) × original (default: 92% of original)
 TIP_FILLET_EXTENSION_FACTOR = 0.045  # Fillet extends beyond last section by this factor × tip_chord (default: 4.5% of tip chord)
@@ -51,7 +49,9 @@ class WingGenerator:
     
     def __init__(self):
         """Initialize the wing generator."""
-        self.wing_start_location = np.array([0.0, Y_OFFSET_OF_BLADES_FOR_BOOLEAN, 0.0])
+        # Note: wing_start_location will be calculated dynamically in generate_wing_from_params
+        # based on the first chord length and hub radius
+        self.wing_start_location = None  # Will be set dynamically
         self.revolve_center = np.array([0.0, 0.0, 0.0])
         self.revolve_axis = np.array([0.0, 0.0, 1.0])
         
@@ -583,7 +583,7 @@ class WingGenerator:
                            hub intersection (default: 3.5). The root NACA thickness is multiplied
                            by this factor, creating a larger profile that acts as a fillet.
                            Note: This parameter only affects thickness, NOT chord length. The root
-                           chord is always fixed at ROOT_CHORD_LENGTH (1.55 * HUB_RADIUS).
+                           chord is always fixed at ROOT_CHORD_LENGTH (1.25 * HUB_RADIUS).
                            Typical values: 2.5 to 10 for structural reinforcement at the root.
             
         Returns:
@@ -630,23 +630,47 @@ class WingGenerator:
         # Replace the root NACA code with the enlarged version
         naca_codes_modified = [enlarged_root_code] + naca_codes[1:]
         
-        # Root chord length is not scaled by root_fillet_scale
-        # It remains at the fixed value defined in the CSV parameters (which should be
-        # ROOT_CHORD_LENGTH = 1.55 * HUB_RADIUS from generate_params.py)
-        # Only the thickness is scaled for structural reinforcement
+        # No modification with the current implementation
         chord_lengths_modified = chord_lengths
         
-        # Account for Y_OFFSET_OF_BLADES_FOR_BOOLEAN:
-        # The overall_length parameter represents the distance from rotor center to wing tip,
-        # but we offset the wing start by Y_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
-        # Therefore, the actual wing length should be reduced by this offset.
-        if overall_length <= Y_OFFSET_OF_BLADES_FOR_BOOLEAN:
+        # Calculate the wing start Y position based on first chord length and hub radius
+        # The chord extends from x=-0.75*chord to x=+0.25*chord in the local frame (see transform_profile_to_section).
+        # When twisted, the maximum radial distance from the Y-axis determines where it touches the hub.
+        # This maximum distance is 0.75*chord (at the trailing edge), regardless of twist angle.
+        # Formula: Y = sqrt(r^2 - (0.75*chord)^2)
+        first_chord = chord_lengths[0]
+        
+        # The effective radial distance is 0.75*chord (trailing edge extent)
+        effective_half_chord = 0.75 * first_chord
+        
+        # Validate that the effective chord doesn't exceed hub radius
+        if effective_half_chord > self.HUB_RADIUS:
             raise ValueError(
-                f"overall_length ({overall_length}) must be greater than "
-                f"Y_OFFSET_OF_BLADES_FOR_BOOLEAN ({Y_OFFSET_OF_BLADES_FOR_BOOLEAN})"
+                f"First chord length ({first_chord}m) has effective radial extent "
+                f"({effective_half_chord:.6f}m) that exceeds hub radius ({self.HUB_RADIUS:.6f}m). "
+                f"Maximum chord length is {self.HUB_RADIUS / 0.75:.6f}m. "
+                f"Note: The validation is independent of twist angle since rotation around "
+                f"Y-axis preserves distance from the Y-axis."
             )
         
-        actual_wing_length = overall_length - Y_OFFSET_OF_BLADES_FOR_BOOLEAN
+        # Calculate Y position where chord touches hub surface
+        # Using the formula: Y = sqrt(r^2 - (0.75*chord)^2)
+        wing_start_y = math.sqrt(self.HUB_RADIUS**2 - effective_half_chord**2)
+        
+        # Set the wing start location
+        self.wing_start_location = np.array([0.0, wing_start_y, 0.0])
+        
+        # Calculate actual wing length
+        # The overall_length represents distance from rotor center to wing tip,
+        # but we start the wing at wing_start_y (where chord touches hub surface).
+        # Therefore, the actual wing length should be reduced by this offset.
+        if overall_length <= wing_start_y:
+            raise ValueError(
+                f"overall_length ({overall_length}) must be greater than "
+                f"wing_start_y ({wing_start_y}) for the given first chord length"
+            )
+        
+        actual_wing_length = overall_length - wing_start_y
         
         # Generate section positions
         section_positions = np.linspace(0, actual_wing_length, n_sections)
@@ -955,7 +979,7 @@ class WingGenerator:
                            hub intersection (default: 3.5). The root NACA thickness is multiplied
                            by this factor, creating a larger profile that acts as a fillet.
                            Note: This parameter only affects thickness, NOT chord length. The root
-                           chord is always fixed at ROOT_CHORD_LENGTH (1.55 * HUB_RADIUS).
+                           chord is always fixed at ROOT_CHORD_LENGTH (1.25 * HUB_RADIUS).
             
         Returns:
             Combined mesh of all wings merged with the hub
