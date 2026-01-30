@@ -638,11 +638,14 @@ class WingGenerator:
         
         # Calculate the wing start Y position based on first chord length and hub radius
         # Place the first NACA section at Y = sqrt(r^2 - (chord_length/2)^2)
-        # This is where the first chord touches the surface of the hub from inside
+        # This positions the chord so that its endpoints (when centered at X=0) lie on
+        # the hub's cylindrical surface. When the chord equals the hub diameter, Y=0
+        # (the wing starts at the hub center).
         first_chord = chord_lengths[0]
         hub_diameter = 2.0 * self.HUB_RADIUS
         
         # Validate that the first chord length doesn't exceed hub diameter
+        # When chord equals diameter, wing_start_y will be 0 (wing starts at hub center)
         if first_chord > hub_diameter:
             raise ValueError(
                 f"First chord length ({first_chord}) exceeds hub diameter ({hub_diameter}). "
