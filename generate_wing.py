@@ -23,8 +23,6 @@ import numpy as np
 import trimesh
 from scipy import interpolate
 
-Y_OFFSET_OF_BLADES_FOR_BOOLEAN = 0.001
-
 # Tip fillet constants
 TIP_FILLET_SIZE_REDUCTION = 0.08  # Final fillet section size = (1 - this value) × original (default: 92% of original)
 TIP_FILLET_EXTENSION_FACTOR = 0.045  # Fillet extends beyond last section by this factor × tip_chord (default: 4.5% of tip chord)
@@ -51,7 +49,9 @@ class WingGenerator:
     
     def __init__(self):
         """Initialize the wing generator."""
-        self.wing_start_location = np.array([0.0, Y_OFFSET_OF_BLADES_FOR_BOOLEAN, 0.0])
+        # Note: wing_start_location will be calculated dynamically in generate_wing_from_params
+        # based on the first chord length and hub radius
+        self.wing_start_location = None  # Will be set dynamically
         self.revolve_center = np.array([0.0, 0.0, 0.0])
         self.revolve_axis = np.array([0.0, 0.0, 1.0])
         
@@ -636,17 +636,38 @@ class WingGenerator:
         # Only the thickness is scaled for structural reinforcement
         chord_lengths_modified = chord_lengths
         
-        # Account for Y_OFFSET_OF_BLADES_FOR_BOOLEAN:
-        # The overall_length parameter represents the distance from rotor center to wing tip,
-        # but we offset the wing start by Y_OFFSET_OF_BLADES_FOR_BOOLEAN for better Boolean merging.
-        # Therefore, the actual wing length should be reduced by this offset.
-        if overall_length <= Y_OFFSET_OF_BLADES_FOR_BOOLEAN:
+        # Calculate the wing start Y position based on first chord length and hub radius
+        # Place the first NACA section at Y = sqrt(r^2 - (chord_length/2)^2)
+        # This is where the first chord touches the surface of the hub from inside
+        first_chord = chord_lengths[0]
+        hub_diameter = 2.0 * self.HUB_RADIUS
+        
+        # Validate that the first chord length doesn't exceed hub diameter
+        if first_chord > hub_diameter:
             raise ValueError(
-                f"overall_length ({overall_length}) must be greater than "
-                f"Y_OFFSET_OF_BLADES_FOR_BOOLEAN ({Y_OFFSET_OF_BLADES_FOR_BOOLEAN})"
+                f"First chord length ({first_chord}) exceeds hub diameter ({hub_diameter}). "
+                f"The first chord must fit within the hub geometry."
             )
         
-        actual_wing_length = overall_length - Y_OFFSET_OF_BLADES_FOR_BOOLEAN
+        # Calculate Y position where first chord touches hub surface
+        # Using the formula: Y = sqrt(r^2 - (chord_length/2)^2)
+        half_chord = first_chord / 2.0
+        wing_start_y = math.sqrt(self.HUB_RADIUS**2 - half_chord**2)
+        
+        # Set the wing start location
+        self.wing_start_location = np.array([0.0, wing_start_y, 0.0])
+        
+        # Calculate actual wing length
+        # The overall_length represents distance from rotor center to wing tip,
+        # but we start the wing at wing_start_y (where chord touches hub surface).
+        # Therefore, the actual wing length should be reduced by this offset.
+        if overall_length <= wing_start_y:
+            raise ValueError(
+                f"overall_length ({overall_length}) must be greater than "
+                f"wing_start_y ({wing_start_y}) for the given first chord length"
+            )
+        
+        actual_wing_length = overall_length - wing_start_y
         
         # Generate section positions
         section_positions = np.linspace(0, actual_wing_length, n_sections)
