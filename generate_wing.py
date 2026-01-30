@@ -630,10 +630,7 @@ class WingGenerator:
         # Replace the root NACA code with the enlarged version
         naca_codes_modified = [enlarged_root_code] + naca_codes[1:]
         
-        # Root chord length is not scaled by root_fillet_scale
-        # It remains at the fixed value defined in the CSV parameters (which should be
-        # ROOT_CHORD_LENGTH = 1.55 * HUB_RADIUS from generate_params.py)
-        # Only the thickness is scaled for structural reinforcement
+        # No modification with the current implementation
         chord_lengths_modified = chord_lengths
         
         # Calculate the wing start Y position based on first chord length and hub radius
