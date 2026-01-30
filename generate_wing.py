@@ -583,7 +583,7 @@ class WingGenerator:
                            hub intersection (default: 3.5). The root NACA thickness is multiplied
                            by this factor, creating a larger profile that acts as a fillet.
                            Note: This parameter only affects thickness, NOT chord length. The root
-                           chord is always fixed at ROOT_CHORD_LENGTH (1.55 * HUB_RADIUS).
+                           chord is always fixed at ROOT_CHORD_LENGTH (1.25 * HUB_RADIUS).
                            Typical values: 2.5 to 10 for structural reinforcement at the root.
             
         Returns:
@@ -633,13 +633,12 @@ class WingGenerator:
         # No modification with the current implementation
         chord_lengths_modified = chord_lengths
         
-        # Calculate the wing start Y position based on first chord length, twist, and hub radius
+        # Calculate the wing start Y position based on first chord length and hub radius
         # The chord extends from x=-0.75*chord to x=+0.25*chord in the local frame (see transform_profile_to_section).
         # When twisted, the maximum radial distance from the Y-axis determines where it touches the hub.
         # This maximum distance is 0.75*chord (at the trailing edge), regardless of twist angle.
         # Formula: Y = sqrt(r^2 - (0.75*chord)^2)
         first_chord = chord_lengths[0]
-        first_twist = twist_angles[0]
         
         # The effective radial distance is 0.75*chord (trailing edge extent)
         effective_half_chord = 0.75 * first_chord
@@ -647,10 +646,11 @@ class WingGenerator:
         # Validate that the effective chord doesn't exceed hub radius
         if effective_half_chord > self.HUB_RADIUS:
             raise ValueError(
-                f"First chord with twist ({first_chord}m chord, {first_twist}° twist) "
-                f"has effective radial extent ({effective_half_chord:.6f}m) that exceeds "
-                f"hub radius ({self.HUB_RADIUS:.6f}m). Maximum chord length for this "
-                f"configuration is {self.HUB_RADIUS / 0.75:.6f}m."
+                f"First chord length ({first_chord}m) has effective radial extent "
+                f"({effective_half_chord:.6f}m) that exceeds hub radius ({self.HUB_RADIUS:.6f}m). "
+                f"Maximum chord length is {self.HUB_RADIUS / 0.75:.6f}m. "
+                f"Note: The validation is independent of twist angle since rotation around "
+                f"Y-axis preserves distance from the Y-axis."
             )
         
         # Calculate Y position where chord touches hub surface
@@ -979,7 +979,7 @@ class WingGenerator:
                            hub intersection (default: 3.5). The root NACA thickness is multiplied
                            by this factor, creating a larger profile that acts as a fillet.
                            Note: This parameter only affects thickness, NOT chord length. The root
-                           chord is always fixed at ROOT_CHORD_LENGTH (1.55 * HUB_RADIUS).
+                           chord is always fixed at ROOT_CHORD_LENGTH (1.25 * HUB_RADIUS).
             
         Returns:
             Combined mesh of all wings merged with the hub
