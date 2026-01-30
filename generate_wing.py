@@ -633,26 +633,29 @@ class WingGenerator:
         # No modification with the current implementation
         chord_lengths_modified = chord_lengths
         
-        # Calculate the wing start Y position based on first chord length and hub radius
-        # Place the first NACA section at Y = sqrt(r^2 - (chord_length/2)^2)
-        # This positions the chord so that its endpoints (when centered at X=0) lie on
-        # the hub's cylindrical surface. When the chord equals the hub diameter, Y=0
-        # (the wing starts at the hub center).
+        # Calculate the wing start Y position based on first chord length, twist, and hub radius
+        # The chord extends from x=-0.75*chord to x=+0.25*chord in the local frame (see transform_profile_to_section).
+        # When twisted, the maximum radial distance from the Y-axis determines where it touches the hub.
+        # This maximum distance is 0.75*chord (at the trailing edge), regardless of twist angle.
+        # Formula: Y = sqrt(r^2 - (0.75*chord)^2)
         first_chord = chord_lengths[0]
-        hub_diameter = 2.0 * self.HUB_RADIUS
+        first_twist = twist_angles[0]
         
-        # Validate that the first chord length doesn't exceed hub diameter
-        # When chord equals diameter, wing_start_y will be 0 (wing starts at hub center)
-        if first_chord > hub_diameter:
+        # The effective radial distance is 0.75*chord (trailing edge extent)
+        effective_half_chord = 0.75 * first_chord
+        
+        # Validate that the effective chord doesn't exceed hub radius
+        if effective_half_chord > self.HUB_RADIUS:
             raise ValueError(
-                f"First chord length ({first_chord}) exceeds hub diameter ({hub_diameter}). "
-                f"The first chord must fit within the hub geometry."
+                f"First chord with twist ({first_chord}m chord, {first_twist}° twist) "
+                f"has effective radial extent ({effective_half_chord:.6f}m) that exceeds "
+                f"hub radius ({self.HUB_RADIUS:.6f}m). Maximum chord length for this "
+                f"configuration is {self.HUB_RADIUS / 0.75:.6f}m."
             )
         
-        # Calculate Y position where first chord touches hub surface
-        # Using the formula: Y = sqrt(r^2 - (chord_length/2)^2)
-        half_chord = first_chord / 2.0
-        wing_start_y = math.sqrt(self.HUB_RADIUS**2 - half_chord**2)
+        # Calculate Y position where chord touches hub surface
+        # Using the formula: Y = sqrt(r^2 - (0.75*chord)^2)
+        wing_start_y = math.sqrt(self.HUB_RADIUS**2 - effective_half_chord**2)
         
         # Set the wing start location
         self.wing_start_location = np.array([0.0, wing_start_y, 0.0])
