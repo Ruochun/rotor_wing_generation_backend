@@ -422,26 +422,26 @@ class WingGenerator:
         return m, p, t
     
     def create_smooth_interpolator(self, control_values: List[float], control_positions: List[float], 
-                                   kind: str = 'cubic') -> interpolate.interp1d:
+                                   kind: str = 'cubic'):
         """
-        Create a smooth interpolator for parameters using spline interpolation.
+        Create a smooth interpolator for parameters using cubic spline interpolation.
+        The interpolator is guaranteed to pass through all control points exactly.
         
         Args:
             control_values: List of control point values (e.g., chord lengths)
             control_positions: List of spanwise positions for control points
-            kind: Interpolation kind ('linear', 'quadratic', 'cubic')
+            kind: Interpolation kind (currently ignored; kept for backward compatibility.
+                  Always uses cubic spline interpolation.)
         
         Returns:
             Interpolation function that can be called with arbitrary positions
         """
-        # Use cubic spline interpolation for smooth curves
-        # This treats control values as hints rather than strict requirements
-        return interpolate.interp1d(
+        # Use CubicSpline interpolation which guarantees passing through all control points
+        # while maintaining smoothness with cubic polynomial segments between points
+        return interpolate.CubicSpline(
             control_positions, 
-            control_values, 
-            kind=kind,
-            fill_value='extrapolate',
-            assume_sorted=True
+            control_values,
+            extrapolate=True
         )
     
     def create_lofted_surface(self, sections: List[np.ndarray]) -> trimesh.Trimesh:
