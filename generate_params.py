@@ -27,6 +27,10 @@ MAX_POSITION_DIGIT = 9  # Maximum value for NACA position digit
 # WARNING: If HUB_RADIUS changes in generate_wing.py, this value MUST be updated accordingly!
 ROOT_CHORD_LENGTH = 0.00271875  # Fixed chord length at root (1.25 * HUB_RADIUS, fits with twist)
 
+# Chord variation parameters for generate_chord_lengths()
+CHORD_VARIATION_RANGE = 1.25  # Range of chord variation: factor varies from (2.0 - CHORD_VARIATION_RANGE) to 2.0
+STEEP_DROP_THRESHOLD = 0.7  # Threshold for steeper drop at edges: gradual decay until this point, then steeper
+
 
 def translate_to_naca_code(max_thickness: float, max_camber: float, max_camber_location: float) -> str:
     """
@@ -121,20 +125,20 @@ def generate_chord_lengths(average_chord: float, chord_variance: float, n_sectio
             normalized_dist = distance_from_peak / max_dist_to_edge
             
             # Use a cosine function to create a bell curve
-            # factor ranges from 2.0 (at peak) to 0.75 (at edges)
-            if normalized_dist < 0.7:
+            # factor ranges from 2.0 (at peak) to (2.0 - CHORD_VARIATION_RANGE) at edges
+            if normalized_dist < STEEP_DROP_THRESHOLD:
                 # Gradual decay from peak
-                factor = 2.0 - 1.25 * normalized_dist / 0.7
+                factor = 2.0 - CHORD_VARIATION_RANGE * normalized_dist / STEEP_DROP_THRESHOLD
             else:
                 # Steeper drop at the far edge
-                steep_phase = (normalized_dist - 0.7) / 0.3
-                factor = 0.75 + (1.25 - 0.75) * (1.0 - steep_phase)
+                steep_phase = (normalized_dist - STEEP_DROP_THRESHOLD) / (1.0 - STEEP_DROP_THRESHOLD)
+                factor = (2.0 - CHORD_VARIATION_RANGE) + CHORD_VARIATION_RANGE * (1.0 - steep_phase)
         else:
             # Edge case: peak at the start
             factor = 2.0
         
         # Ensure factor stays within reasonable bounds
-        factor = max(0.75, min(2.0, factor))
+        factor = max(2.0 - CHORD_VARIATION_RANGE, min(2.0, factor))
         
         # Scale by variance: higher variance means more pronounced variation
         # At variance=0, factor should be 1.0 for all sections
