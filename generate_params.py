@@ -27,6 +27,9 @@ MAX_POSITION_DIGIT = 9  # Maximum value for NACA position digit
 # WARNING: If HUB_RADIUS changes in generate_wing.py, this value MUST be updated accordingly!
 ROOT_CHORD_LENGTH = 0.00271875  # Fixed chord length at root (1.25 * HUB_RADIUS, fits with twist)
 
+# Chord variation parameters for generate_chord_lengths()
+CHORD_VARIATION_RANGE = 1.25  # Range of chord variation: factor varies from (2.0 - CHORD_VARIATION_RANGE) to 2.0
+
 
 def translate_to_naca_code(max_thickness: float, max_camber: float, max_camber_location: float) -> str:
     """
@@ -69,7 +72,7 @@ def translate_to_naca_code(max_thickness: float, max_camber: float, max_camber_l
     return f"{m}{p}{tt:02d}"
 
 
-def generate_chord_lengths(average_chord: float, chord_variance: float, n_sections: int = 6) -> List[float]:
+def generate_chord_lengths(average_chord: float, chord_variance: float, n_sections: int = 6, chord_peak_location: float = 0.9) -> List[float]:
     """
     Generate chord lengths for each section based on average and variance.
     
@@ -79,6 +82,11 @@ def generate_chord_lengths(average_chord: float, chord_variance: float, n_sectio
         chord_variance: Variance [0,1] indicating expansion/shrink pattern
                        0 = constant chord (all non-root sections equal average_chord)
                        1 = maximum variation (expand then shrink with smooth transitions)
+        n_sections: Number of sections along the wing (default: 6)
+        chord_peak_location: Location of maximum chord [0,1]
+                            0 = longest chord near root
+                            0.9 = peak near tip (default)
+                            1 = longest chord at tip
     
     Returns:
         List of chord lengths for each section, with root always at ROOT_CHORD_LENGTH
@@ -98,23 +106,59 @@ def generate_chord_lengths(average_chord: float, chord_variance: float, n_sectio
         t = i / (n_sections - 1)
         
         # Create a smooth asymmetric bell curve using cosine-based interpolation
-        # This creates a smooth curve that peaks around t=0.33, then gradually decays
+        # The peak location is controlled by chord_peak_location parameter
+        # This uses three phases: rising, slow declining, and sharp declining
+        
+        # Calculate the three phase boundaries based on chord_peak_location
+        # When chord_peak_location = 0.0: peak at first section, all declining
+        # When chord_peak_location = 0.9: peak near tip (default)
+        # When chord_peak_location = 1.0: all rising phase to the tip
+        
+        # Map chord_peak_location to the peak position in t-space
+        peak_t = chord_peak_location
+        
+        # Calculate phase boundaries
+        # Rising phase: from 0 to peak_t
+        # Slow declining phase: from peak_t to slow_decline_end
+        # Sharp declining phase: from slow_decline_end to 1.0
+        
+        # Special handling for extreme cases
+        if peak_t >= 0.99:
+            # When peak is at tip (chord_peak_location ~= 1.0), all rising phase
+            slow_decline_end = 1.1  # Beyond range, so no decline phases
+        elif peak_t <= 0.01:
+            # When peak is at start (chord_peak_location ~= 0.0), all declining
+            slow_decline_end = peak_t + (1.0 - peak_t) * 0.6
+        else:
+            # Normal case: calculate slow decline end based on remaining space
+            if peak_t < 0.7:
+                slow_decline_end = peak_t + (1.0 - peak_t) * 0.6
+            else:
+                slow_decline_end = peak_t + (1.0 - peak_t) * 0.5
         
         # Use a modified raised cosine for smooth transitions
-        # Peak around 30-40% of span, then gradual decay with steeper drop at the end
-        if t < 0.33:
+        if t < peak_t:
             # Rising phase: smooth acceleration from root to peak
-            # Use raised cosine for smooth S-curve
-            phase = t / 0.33
-            factor = 0.75 + 1.25 * (1.0 - math.cos(phase * math.pi)) / 2.0
-        elif t < 0.7:
+            if peak_t > 0:
+                phase = t / peak_t
+                factor = 0.75 + CHORD_VARIATION_RANGE * (1.0 - math.cos(phase * math.pi)) / 2.0
+            else:
+                # Edge case: peak at start (chord_peak_location = 0)
+                factor = 0.75
+        elif t < slow_decline_end:
             # Gradual decay: smooth transition from peak to mid-span
-            phase = (t - 0.33) / 0.37
-            factor = 2.0 - 0.75 * (1.0 - math.cos(phase * math.pi)) / 2.0
+            if slow_decline_end > peak_t:
+                phase = (t - peak_t) / (slow_decline_end - peak_t)
+                factor = 2.0 - 0.75 * (1.0 - math.cos(phase * math.pi)) / 2.0
+            else:
+                factor = 2.0
         else:
             # Steeper drop at tip: smooth but faster decay
-            phase = (t - 0.7) / 0.3
-            factor = 1.25 - 1.0 * (1.0 - math.cos(phase * math.pi)) / 2.0
+            if slow_decline_end < 1.0:
+                phase = (t - slow_decline_end) / (1.0 - slow_decline_end)
+                factor = 1.25 - 1.0 * (1.0 - math.cos(phase * math.pi)) / 2.0
+            else:
+                factor = 1.25
         
         # Scale by variance: higher variance means more pronounced variation
         # At variance=0, factor should be 1.0 for all sections
@@ -163,6 +207,7 @@ def generate_params_csv(
     max_camber_location: float = 0.4,
     average_chord_length: float = 0.002,
     chord_length_variance: float = 0.5,
+    chord_peak_location: float = 0.9,
     max_twist_angle: float = 40.0,
     n_wings: int = 3,
     rpm: float = 3000.0,
@@ -181,6 +226,10 @@ def generate_params_csv(
         max_camber_location: Location of max camber [0,1]
         average_chord_length: Average chord length (m)
         chord_length_variance: Variance in chord length [0,1]
+        chord_peak_location: Location of maximum chord [0,1]
+                            0 = longest chord near root
+                            0.9 = peak near tip (default)
+                            1 = longest chord at tip
         max_twist_angle: Maximum twist angle at root (degrees)
         n_wings: Number of wings
         rpm: Rotations per minute
@@ -190,7 +239,7 @@ def generate_params_csv(
     """
     # Translate abstract requirements to concrete parameters
     naca_code = translate_to_naca_code(chord_max_thickness, max_camber, max_camber_location)
-    chord_lengths = generate_chord_lengths(average_chord_length, chord_length_variance, n_sections)
+    chord_lengths = generate_chord_lengths(average_chord_length, chord_length_variance, n_sections, chord_peak_location)
     twist_angles = generate_twist_angles(max_twist_angle, n_sections)
     
     # All sections use the same NACA code (root fillet will be handled by generate_wing.py)
@@ -253,6 +302,11 @@ Examples:
   # Custom chord distribution
   python generate_params.py input.csv --average-chord-length 0.0025 --chord-length-variance 0.8
   
+  # Control chord peak location (where longest chord is)
+  python generate_params.py input.csv --chord-peak-location 0.0  # Peak near root
+  python generate_params.py input.csv --chord-peak-location 0.9  # Peak near tip (default)
+  python generate_params.py input.csv --chord-peak-location 1.0  # Peak at tip
+  
   # Custom twist angle
   python generate_params.py input.csv --max-twist-angle 45
         """
@@ -271,6 +325,8 @@ Examples:
                        help='Average chord length in meters (default: 0.002)')
     parser.add_argument('--chord-length-variance', type=float, default=0.5,
                        help='Chord length variance [0,1], 0=constant, 1=max variation (default: 0.5)')
+    parser.add_argument('--chord-peak-location', type=float, default=0.9,
+                       help='Location of maximum chord [0,1], 0=near root, 0.9=near tip (default), 1=at tip')
     parser.add_argument('--max-twist-angle', type=float, default=40.0,
                        help='Maximum twist angle at root in degrees (default: 40.0)')
     parser.add_argument('--n-wings', type=int, default=3,
@@ -293,6 +349,8 @@ Examples:
         parser.error("max-camber-location must be between 0 and 1")
     if args.chord_length_variance < 0 or args.chord_length_variance > 1:
         parser.error("chord-length-variance must be between 0 and 1")
+    if args.chord_peak_location < 0 or args.chord_peak_location > 1:
+        parser.error("chord-peak-location must be between 0 and 1")
     if args.n_sections < 2:
         parser.error("n-sections must be at least 2")
     
@@ -305,6 +363,7 @@ Examples:
         max_camber_location=args.max_camber_location,
         average_chord_length=args.average_chord_length,
         chord_length_variance=args.chord_length_variance,
+        chord_peak_location=args.chord_peak_location,
         max_twist_angle=args.max_twist_angle,
         n_wings=args.n_wings,
         rpm=args.rpm,
