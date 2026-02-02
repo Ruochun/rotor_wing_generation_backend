@@ -1015,8 +1015,18 @@ class WingGenerator:
             wing_meshes.append(rotated_wing)
         
         # Load hub with hole from external STL file
-        hub_with_hole = trimesh.load('rotor_hub.stl')
-        hub_with_hole.apply_scale(1. / 1000.0)  # Convert from mm to meters 
+        # hub_with_hole = trimesh.load('rotor_hub.stl')
+        # hub_with_hole.apply_scale(1. / 1000.0)  # Convert from mm to meters 
+        
+        # Generate hub with hole using trimesh primitives
+        # Create the hub cylinder
+        hub_cylinder = self.create_hub_cylinder()
+        
+        # Create the center hole cylinder
+        hole_cylinder = self.create_hole_cylinder()
+        
+        # Use Boolean difference to create hub with hole
+        hub_with_hole = trimesh.boolean.difference([hub_cylinder, hole_cylinder], check_volume=False)
         
         # Fix normals on the loaded hub mesh
         self.fix_normals_outward(hub_with_hole)
