@@ -29,7 +29,6 @@ ROOT_CHORD_LENGTH = 0.00271875  # Fixed chord length at root (1.25 * HUB_RADIUS,
 
 # Chord variation parameters for generate_chord_lengths()
 CHORD_VARIATION_RANGE = 1.25  # Range of chord variation: factor varies from (2.0 - CHORD_VARIATION_RANGE) to 2.0
-STEEP_DROP_THRESHOLD = 0.7  # Threshold for steeper drop at edges: gradual decay until this point, then steeper
 
 
 def translate_to_naca_code(max_thickness: float, max_camber: float, max_camber_location: float) -> str:
@@ -108,37 +107,58 @@ def generate_chord_lengths(average_chord: float, chord_variance: float, n_sectio
         
         # Create a smooth asymmetric bell curve using cosine-based interpolation
         # The peak location is controlled by chord_peak_location parameter
+        # This uses three phases: rising, slow declining, and sharp declining
         
-        # Calculate distance from peak position
-        # Peak is at chord_peak_location in normalized [0,1] space
-        distance_from_peak = abs(t - chord_peak_location)
+        # Calculate the three phase boundaries based on chord_peak_location
+        # When chord_peak_location = 0.0: peak at first section, all declining
+        # When chord_peak_location = 0.35: peak around 0.33, gradual then steep decline (default)
+        # When chord_peak_location = 1.0: all rising phase to the tip
         
-        # Create a smooth bell curve centered at chord_peak_location
-        # Use a cosine-based function for smooth transitions
-        # The width of the bell curve adapts to the peak position
+        # Map chord_peak_location to the peak position in t-space
+        peak_t = chord_peak_location
         
-        # Determine the maximum distance from peak to either edge
-        max_dist_to_edge = max(chord_peak_location, 1.0 - chord_peak_location)
+        # Calculate phase boundaries
+        # Rising phase: from 0 to peak_t
+        # Slow declining phase: from peak_t to slow_decline_end
+        # Sharp declining phase: from slow_decline_end to 1.0
         
-        if max_dist_to_edge > 0:
-            # Normalize distance by the maximum possible distance
-            normalized_dist = distance_from_peak / max_dist_to_edge
-            
-            # Use a cosine function to create a bell curve
-            # factor ranges from 2.0 (at peak) to (2.0 - CHORD_VARIATION_RANGE) at edges
-            if normalized_dist < STEEP_DROP_THRESHOLD:
-                # Gradual decay from peak
-                factor = 2.0 - CHORD_VARIATION_RANGE * normalized_dist / STEEP_DROP_THRESHOLD
-            else:
-                # Steeper drop at the far edge
-                steep_phase = (normalized_dist - STEEP_DROP_THRESHOLD) / (1.0 - STEEP_DROP_THRESHOLD)
-                factor = (2.0 - CHORD_VARIATION_RANGE) + CHORD_VARIATION_RANGE * (1.0 - steep_phase)
+        # Special handling for extreme cases
+        if peak_t >= 0.99:
+            # When peak is at tip (chord_peak_location ~= 1.0), all rising phase
+            slow_decline_end = 1.1  # Beyond range, so no decline phases
+        elif peak_t <= 0.01:
+            # When peak is at start (chord_peak_location ~= 0.0), all declining
+            slow_decline_end = peak_t + (1.0 - peak_t) * 0.6
         else:
-            # Edge case: peak at the start
-            factor = 2.0
+            # Normal case: calculate slow decline end based on remaining space
+            if peak_t < 0.7:
+                slow_decline_end = peak_t + (1.0 - peak_t) * 0.6
+            else:
+                slow_decline_end = peak_t + (1.0 - peak_t) * 0.5
         
-        # Ensure factor stays within reasonable bounds
-        factor = max(2.0 - CHORD_VARIATION_RANGE, min(2.0, factor))
+        # Use a modified raised cosine for smooth transitions
+        if t < peak_t:
+            # Rising phase: smooth acceleration from root to peak
+            if peak_t > 0:
+                phase = t / peak_t
+                factor = 0.75 + CHORD_VARIATION_RANGE * (1.0 - math.cos(phase * math.pi)) / 2.0
+            else:
+                # Edge case: peak at start (chord_peak_location = 0)
+                factor = 0.75
+        elif t < slow_decline_end:
+            # Gradual decay: smooth transition from peak to mid-span
+            if slow_decline_end > peak_t:
+                phase = (t - peak_t) / (slow_decline_end - peak_t)
+                factor = 2.0 - 0.75 * (1.0 - math.cos(phase * math.pi)) / 2.0
+            else:
+                factor = 2.0
+        else:
+            # Steeper drop at tip: smooth but faster decay
+            if slow_decline_end < 1.0:
+                phase = (t - slow_decline_end) / (1.0 - slow_decline_end)
+                factor = 1.25 - 1.0 * (1.0 - math.cos(phase * math.pi)) / 2.0
+            else:
+                factor = 1.25
         
         # Scale by variance: higher variance means more pronounced variation
         # At variance=0, factor should be 1.0 for all sections
