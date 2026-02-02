@@ -22,6 +22,7 @@ python generate_params.py input.csv [options]
 - `--max-camber-location`: Location of max camber [0,1], where 0=leading edge (default: 0.4)
 - `--average-chord-length`: Average chord length in meters (default: 0.002). Note: Root section is always fixed at 0.00271875m (2.72mm) for rotor hub union.
 - `--chord-length-variance`: Chord length variance [0,1], 0=constant, 1=max variation (default: 0.5). Uses smooth cosine-based transitions.
+- `--chord-peak-location`: Location of maximum chord [0,1], where 0=near root, 0.35=30-40% span (default), 1=at tip. Controls where the longest chord is positioned along the wing span.
 - `--max-twist-angle`: Maximum twist angle at root in degrees (default: 40.0)
 - `--n-wings`: Number of wings (default: 3)
 - `--rpm`: Rotations per minute (default: 3000.0)
@@ -42,6 +43,10 @@ python generate_params.py input.csv --chord-max-thickness 12 --max-camber 5 --ma
 
 # Custom chord distribution with high variance
 python generate_params.py input.csv --average-chord-length 0.0025 --chord-length-variance 0.8
+
+# Control chord peak location (where longest chord is)
+python generate_params.py input.csv --chord-peak-location 0.0  # Peak near root
+python generate_params.py input.csv --chord-peak-location 1.0  # Peak at tip
 
 # Custom twist angle
 python generate_params.py input.csv --max-twist-angle 45
