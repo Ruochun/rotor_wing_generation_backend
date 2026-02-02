@@ -72,7 +72,7 @@ def translate_to_naca_code(max_thickness: float, max_camber: float, max_camber_l
     return f"{m}{p}{tt:02d}"
 
 
-def generate_chord_lengths(average_chord: float, chord_variance: float, n_sections: int = 6, chord_peak_location: float = 0.35) -> List[float]:
+def generate_chord_lengths(average_chord: float, chord_variance: float, n_sections: int = 6, chord_peak_location: float = 0.9) -> List[float]:
     """
     Generate chord lengths for each section based on average and variance.
     
@@ -85,7 +85,7 @@ def generate_chord_lengths(average_chord: float, chord_variance: float, n_sectio
         n_sections: Number of sections along the wing (default: 6)
         chord_peak_location: Location of maximum chord [0,1]
                             0 = longest chord near root
-                            0.35 = peak around 30-40% of span (default, current behavior)
+                            0.9 = peak near tip (default)
                             1 = longest chord at tip
     
     Returns:
@@ -111,7 +111,7 @@ def generate_chord_lengths(average_chord: float, chord_variance: float, n_sectio
         
         # Calculate the three phase boundaries based on chord_peak_location
         # When chord_peak_location = 0.0: peak at first section, all declining
-        # When chord_peak_location = 0.35: peak around 0.33, gradual then steep decline (default)
+        # When chord_peak_location = 0.9: peak near tip (default)
         # When chord_peak_location = 1.0: all rising phase to the tip
         
         # Map chord_peak_location to the peak position in t-space
@@ -207,7 +207,7 @@ def generate_params_csv(
     max_camber_location: float = 0.4,
     average_chord_length: float = 0.002,
     chord_length_variance: float = 0.5,
-    chord_peak_location: float = 0.35,
+    chord_peak_location: float = 0.9,
     max_twist_angle: float = 40.0,
     n_wings: int = 3,
     rpm: float = 3000.0,
@@ -228,7 +228,7 @@ def generate_params_csv(
         chord_length_variance: Variance in chord length [0,1]
         chord_peak_location: Location of maximum chord [0,1]
                             0 = longest chord near root
-                            0.35 = peak around 30-40% of span (default)
+                            0.9 = peak near tip (default)
                             1 = longest chord at tip
         max_twist_angle: Maximum twist angle at root (degrees)
         n_wings: Number of wings
@@ -304,7 +304,7 @@ Examples:
   
   # Control chord peak location (where longest chord is)
   python generate_params.py input.csv --chord-peak-location 0.0  # Peak near root
-  python generate_params.py input.csv --chord-peak-location 0.35 # Peak at 30-40% (default)
+  python generate_params.py input.csv --chord-peak-location 0.9  # Peak near tip (default)
   python generate_params.py input.csv --chord-peak-location 1.0  # Peak at tip
   
   # Custom twist angle
@@ -325,8 +325,8 @@ Examples:
                        help='Average chord length in meters (default: 0.002)')
     parser.add_argument('--chord-length-variance', type=float, default=0.5,
                        help='Chord length variance [0,1], 0=constant, 1=max variation (default: 0.5)')
-    parser.add_argument('--chord-peak-location', type=float, default=0.35,
-                       help='Location of maximum chord [0,1], 0=near root, 0.35=30-40%% span (default), 1=at tip')
+    parser.add_argument('--chord-peak-location', type=float, default=0.9,
+                       help='Location of maximum chord [0,1], 0=near root, 0.9=near tip (default), 1=at tip')
     parser.add_argument('--max-twist-angle', type=float, default=40.0,
                        help='Maximum twist angle at root in degrees (default: 40.0)')
     parser.add_argument('--n-wings', type=int, default=3,
